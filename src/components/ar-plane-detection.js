@@ -9,29 +9,56 @@ AFRAME.registerComponent('ar-plane-detection', {
     },
 
     init: function () {
+        console.log('[ar-plane-detection] Composant initialisé');
         this.planes = new Map();
         this.xrSession = null;
         this.referenceSpace = null;
+        this.sessionReady = false;
         
         // Récupérer les éléments de debug
         this.debugEl = document.getElementById('debug');
         this.surfacesEl = document.getElementById('surfaces');
 
+        // Essayer plusieurs événements pour détecter le démarrage de la session
         this.el.sceneEl.addEventListener('enter-vr', () => {
-            this.updateText('Session AR démarrée. Scannez votre environnement...');
-            setTimeout(() => {
-                const renderer = this.el.sceneEl.renderer;
-                if (renderer && renderer.xr) {
-                    this.xrSession = renderer.xr.getSession();
-                    this.referenceSpace = renderer.xr.getReferenceSpace();
-                    if (this.xrSession) {
-                        const hasPlaneDetection = this.xrSession.enabledFeatures?.includes('plane-detection');
-                        console.log('[Planes] Session active, plane-detection:', hasPlaneDetection);
-                        this.updateText(hasPlaneDetection ? 'Détection de plans activée' : 'Détection de plans non disponible');
-                    }
-                }
-            }, 500);
+            console.log('[ar-plane-detection] Event enter-vr déclenché');
+            this.initSession();
         });
+        
+        // Backup: vérifier périodiquement si la session existe
+        this.checkSessionInterval = setInterval(() => {
+            if (!this.sessionReady && this.el.sceneEl.renderer && this.el.sceneEl.renderer.xr) {
+                const session = this.el.sceneEl.renderer.xr.getSession();
+                if (session && !this.xrSession) {
+                    console.log('[ar-plane-detection] Session détectée via intervalle');
+                    this.initSession();
+                }
+            }
+        }, 500);
+    },
+    
+    initSession: function() {
+        if (this.sessionReady) return;
+        
+        this.updateText('Session AR démarrée. Scannez votre environnement...');
+        
+        setTimeout(() => {
+            const renderer = this.el.sceneEl.renderer;
+            if (renderer && renderer.xr) {
+                this.xrSession = renderer.xr.getSession();
+                this.referenceSpace = renderer.xr.getReferenceSpace();
+                
+                if (this.xrSession) {
+                    this.sessionReady = true;
+                    clearInterval(this.checkSessionInterval);
+                    
+                    const hasPlaneDetection = this.xrSession.enabledFeatures?.includes('plane-detection');
+                    console.log('[Planes] Session active, plane-detection:', hasPlaneDetection);
+                    console.log('[Planes] enabledFeatures:', this.xrSession.enabledFeatures);
+                    this.updateText(hasPlaneDetection ? 'Détection de plans activée ✓' : '⚠ Détection de plans non disponible');
+                }
+            }
+        }, 500);
     },
     
     updateText: function(msg, count = null) {
@@ -45,7 +72,7 @@ AFRAME.registerComponent('ar-plane-detection', {
     },
 
     tick: function () {
-        if (!this.xrSession) return;
+        if (!this.sessionReady || !this.xrSession) return;
 
         const frame = this.el.sceneEl.renderer.xr.getFrame();
         if (!frame) return;
@@ -54,7 +81,12 @@ AFRAME.registerComponent('ar-plane-detection', {
         const detectedPlanes = frame.detectedPlanes || this.xrSession.detectedPlanes;
         
         if (!detectedPlanes) {
-            this.updateText('AR activé, mais pas de détection de plans.');
+            // Log seulement une fois
+            if (!this._noDetectionLogged) {
+                console.warn('[Planes] detectedPlanes non disponible dans frame ou session');
+                this.updateText('AR activé, mais pas de détection de plans.');
+                this._noDetectionLogged = true;
+            }
             return;
         }
 
@@ -146,6 +178,13 @@ AFRAME.registerComponent('ar-plane-detection', {
         this.updatePlane(plane, id, frame);
 
         console.log('[Planes] Nouveau plan:', plane.orientation, 'taille:', width.toFixed(2), 'x', depth.toFixed(2));
+        
+        // Test visuel: créer aussi une sphère au centre du plan
+        const testSphere = document.createElement('a-sphere');
+        testSphere.setAttribute('radius', '0.05');
+        testSphere.setAttribute('color', '#FFFF00');
+        testSphere.setAttribute('position', '0 0.1 0');
+        entity.appendChild(testSphere);
     },
 
     updatePlane: function (plane, id, frame) {

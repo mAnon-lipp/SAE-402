@@ -601,7 +601,23 @@ window.addEventListener('load', () => {
                         domOverlay: { root: document.getElementById('overlay') }
                     });
 
+                    console.log('[Main] Session AR créée, features:', xrSession.enabledFeatures);
+                    
+                    // Vérifier plane-detection
+                    const hasPlaneDetection = xrSession.enabledFeatures?.includes('plane-detection');
+                    console.log('[Main] 🟢 Plane Detection disponible:', hasPlaneDetection);
+                    if (!hasPlaneDetection) {
+                        console.warn('⚠️ ATTENTION: plane-detection n\'est pas activé sur ce casque!');
+                        if (debugEl) debugEl.textContent = '⚠️ Plane detection indisponible';
+                    }
+                    
                     sceneEl.renderer.xr.setSession(xrSession);
+                    
+                    // Force trigger enter-vr event pour les composants
+                    setTimeout(() => {
+                        sceneEl.emit('enter-vr');
+                        console.log('[Main] Event enter-vr émis');
+                    }, 100);
 
                 // Controllers Three.js
                 const ctrl0 = sceneEl.renderer.xr.getController(0);
