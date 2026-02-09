@@ -705,7 +705,7 @@ window.addEventListener('load', () => {
             // --- TRASHCAN COLLISION CHECK ---
             checkTrashcanCollisions();
 
-            // --- COFFEE DELIVERY CHECK ---
+            // --- COFFEE DELIVERY CHECK (CONTINUOUS) ---
             checkCoffeeDelivery();
 
             // --- MANUEL RAYCASTER & DIAGNOSTICS ---
@@ -1221,6 +1221,9 @@ window.addEventListener('load', () => {
         const customers = [];
 
         function spawnCustomer() {
+            // RÉINITIALISER LE FLAG DE LIVRAISON (IMPORTANT !)
+            coffeeDelivered = false;
+            
             // Limite à 1 client pour le test
             if (customers.length > 0) {
                 console.log('Client déjà présent');
@@ -1228,6 +1231,7 @@ window.addEventListener('load', () => {
             }
 
             console.log('🧍 Spawning customer...');
+            console.log('🚩 coffeeDelivered reset to FALSE');
             debugEl.textContent = '🧍 NEW CUSTOMER';
 
             // Récupérer la position de la caméra
@@ -1258,10 +1262,10 @@ window.addEventListener('load', () => {
 
             // ZONE DE DÉTECTION VISIBLE (Cercle vert au sol)
             const deliveryZone = document.createElement('a-ring');
-            deliveryZone.setAttribute('radius-inner', '0.4');
-            deliveryZone.setAttribute('radius-outer', '0.6');
+            deliveryZone.setAttribute('radius-inner', '0.9');
+            deliveryZone.setAttribute('radius-outer', '1.2');
             deliveryZone.setAttribute('color', '#00ff00');
-            deliveryZone.setAttribute('opacity', '0.5');
+            deliveryZone.setAttribute('opacity', '0.7');
             deliveryZone.setAttribute('rotation', '-90 0 0');
             deliveryZone.setAttribute('position', '0 0.01 0');
             deliveryZone.setAttribute('material', 'shader: flat; transparent: true');
@@ -1298,109 +1302,175 @@ window.addEventListener('load', () => {
             console.log('Client despawned via removeCustomer');
         }
 
-        // Rayon de détection (0.5m = zone visible verte)
-        const CUSTOMER_RADIUS = 0.5;
-        let lastCoffeeDebug = 0;
+        // Détection continue de livraison de café
+        const DELIVERY_RADIUS = 1.2;
         let coffeeDelivered = false;
 
         function checkCoffeeDelivery() {
-            if (coffeeDelivered) return;
+            // DEBUG PERMANENT - Afficher l'état
+            if (debugEl) {
+                debugEl.textContent = `👥 Clients: ${customers.length} | ☕ Tasses: ${spawnedObjects.filter(o => o && o.classList && o.classList.contains('coffee-cup')).length} | 🚫 Delivered: ${coffeeDelivered}`;
+            }
+
+            // Si pas de client, rien à faire
             if (customers.length === 0) return;
+            // Si déjà livré, rien à faire
+            if (coffeeDelivered) return;
 
             const customer = customers[0];
             if (!customer || !customer.object3D) return;
 
+            // Position du client
             const custPos = new THREE.Vector3();
             customer.object3D.getWorldPosition(custPos);
 
-            // Chercher TOUTES les tasses (même celles qui ne sont pas dans spawnedObjects)
-            const allCups = sceneEl.querySelectorAll('.coffee-cup');
-            
-            // Debug détaillé
-            const now = Date.now();
-            if (now - lastCoffeeDebug > 1000) {
-                lastCoffeeDebug = now;
-                console.log('=== COFFEE DELIVERY CHECK ===');
-                console.log('Customer at:', custPos.x.toFixed(2), custPos.y.toFixed(2), custPos.z.toFixed(2));
-                console.log('Total coffee cups found:', allCups.length);
-                console.log('SpawnedObjects length:', spawnedObjects.length);
-            }
+            // Compter et vérifier les tasses
+            let cupCount = 0;
+            let minDistance = 999;
 
-            allCups.forEach((cup, index) => {
-                if (!cup || !cup.object3D) return;
+            // Vérifier TOUS les objets spawnés (pas de querySelector)
+            spawnedObjects.forEach(obj => {
+                if (!obj || !obj.object3D) return;
+                
+                // Vérifier si c'est une tasse de café
+                const isCoffee = obj.classList.contains('coffee-cup');
+                if (!isCoffee) return;
 
+                cupCount++;
+
+                // Position de la tasse
                 const cupPos = new THREE.Vector3();
-                cup.object3D.getWorldPosition(cupPos);
+                obj.object3D.getWorldPosition(cupPos);
 
-                // Distance 2D (X et Z seulement) pour ignorer la hauteur
+                // Distance 2D (ignore la hauteur)
                 const distanceXZ = Math.sqrt(
                     Math.pow(custPos.x - cupPos.x, 2) + 
                     Math.pow(custPos.z - cupPos.z, 2)
                 );
 
-                // Debug pour chaque tasse
-                if (now - lastCoffeeDebug > 1000) {
-                    console.log(`Cup ${index}: pos(${cupPos.x.toFixed(2)}, ${cupPos.y.toFixed(2)}, ${cupPos.z.toFixed(2)}) | dist: ${distanceXZ.toFixed(2)}m`);
+                if (distanceXZ < minDistance) minDistance = distanceXZ;
+
+                // Afficher la distance en temps réel
+                if (debugEl && cupCount === 1) {
+                    debugEl.textContent = `☕ DISTANCE: ${distanceXZ.toFixed(2)}m / ${DELIVERY_RADIUS}m ${distanceXZ < DELIVERY_RADIUS ? '✅✅ DANS LA ZONE!' : ''}`;
                 }
 
-                // Mise à jour du debug visuel
-                if (index === 0) { // Afficher seulement pour la première tasse
-                    debugEl.textContent = `☕ Distance: ${distanceXZ.toFixed(2)}m | Zone: ${CUSTOMER_RADIUS}m`;
-                }
-
-                // DÉTECTION DE LIVRAISON
-                if (distanceXZ < CUSTOMER_RADIUS && !coffeeDelivered) {
-                    coffeeDelivered = true;
-                    
-                    console.log('🎉🎉🎉 COFFEE DELIVERED! 🎉🎉🎉');
-                    console.log('Distance XZ was:', distanceXZ.toFixed(3), 'm');
-                    console.log('Cup ID:', cup.id);
-                    
-                    showARNotification('✅ THANKS! Perfect coffee!', 3000);
-                    debugEl.textContent = '✅ Café livré!';
-
-                    // Animation de la zone de livraison (flash vert)
-                    const zone = customer.querySelector('.delivery-zone');
-                    if (zone) {
-                        zone.setAttribute('color', '#00ff00');
-                        zone.setAttribute('opacity', '1');
-                    }
-
-                    // Supprimer la tasse après un court délai (effet visuel)
-                    setTimeout(() => {
-                        // Retirer de spawnedObjects si présent
-                        const idx = spawnedObjects.indexOf(cup);
-                        if (idx > -1) spawnedObjects.splice(idx, 1);
-                        
-                        // Retirer le corps physique
-                        if (cup.body && cup.body.world) {
-                            try {
-                                cup.body.world.removeBody(cup.body);
-                            } catch (e) {
-                                console.log('Physics body already removed');
-                            }
-                        }
-                        
-                        // Retirer du DOM
-                        if (cup.parentNode) {
-                            cup.parentNode.removeChild(cup);
-                            console.log('Cup removed from scene');
-                        }
-                    }, 300);
-
-                    // Supprimer le client après 1 seconde
-                    setTimeout(() => {
-                        removeCustomer(customer);
-                        console.log('Customer removed');
-                        
-                        // Spawn nouveau client après 3 secondes
-                        setTimeout(() => {
-                            coffeeDelivered = false;
-                            spawnCustomer();
-                        }, 3000);
-                    }, 1000);
+                // LIVRAISON DÈS QUE C'EST DANS LA ZONE
+                if (distanceXZ < DELIVERY_RADIUS) {
+                    console.log('🎯 CUP IN RANGE! Triggering delivery...');
+                    handleCoffeeDelivery(obj, customer);
                 }
             });
+        }
+
+        function handleCoffeeDelivery(cup, customer) {
+            // Double vérification
+            if (coffeeDelivered) {
+                console.log('⚠️ DELIVERY already processed, skipping...');
+                return;
+            }
+            
+            console.log('🎉🎉🎉 COFFEE DELIVERY TRIGGERED! 🎉🎉🎉');
+            console.log('Cup object:', cup);
+            console.log('Cup ID:', cup ? cup.id : 'NULL');
+            console.log('Customer object:', customer);
+            console.log('Customer ID:', customer ? customer.id : 'NULL');
+            
+            // Marquer comme livré IMMÉDIATEMENT pour éviter double appel
+            coffeeDelivered = true;
+            
+            // FORCER LE LÂCHER si on tient cette tasse
+            if (currentGrabbedEl === cup) {
+                grabbed = false;
+                grabController = null;
+                currentGrabbedEl = null;
+                console.log('🔓 Forced release of grabbed cup');
+            }
+            
+            // Notification AR
+            showARNotification('✅ THANKS! Perfect coffee!', 3000);
+            if (debugEl) debugEl.textContent = '✅ LIVRAISON! DESTRUCTION...';
+
+            console.log('🗑️ STARTING AGGRESSIVE DELETION...');
+
+            // MÉTHODE ULTRA AGRESSIVE : TOUT EN MÊME TEMPS
+            
+            // 1. TASSE : Multiples méthodes simultanées
+            if (cup && cup.object3D) {
+                console.log('🔥 Destroying cup with ALL methods...');
+                
+                // Méthode 1 : Scale à zéro
+                cup.setAttribute('scale', '0 0 0');
+                cup.object3D.scale.set(0, 0, 0);
+                
+                // Méthode 2 : Invisible
+                cup.setAttribute('visible', 'false');
+                cup.object3D.visible = false;
+                
+                // Méthode 3 : Opacité zéro
+                cup.setAttribute('opacity', '0');
+                
+                // Méthode 4 : Déplacer très loin
+                cup.setAttribute('position', '0 -1000 0');
+                cup.object3D.position.set(0, -1000, 0);
+                
+                // Méthode 5 : Désactiver physique
+                if (cup.body) {
+                    cup.body.collisionResponse = false;
+                    cup.body.type = 0;
+                    cup.body.mass = 0;
+                }
+                
+                console.log('✅ Cup destroyed with multiple methods');
+            } else {
+                console.log('❌ Cup or cup.object3D is NULL!');
+            }
+            
+            // 2. CLIENT : Mêmes méthodes
+            if (customer && customer.object3D) {
+                console.log('🔥 Destroying customer with ALL methods...');
+                
+                // Scale à zéro
+                customer.setAttribute('scale', '0 0 0');
+                customer.object3D.scale.set(0, 0, 0);
+                
+                // Invisible
+                customer.setAttribute('visible', 'false');
+                customer.object3D.visible = false;
+                
+                // Opacité zéro
+                customer.setAttribute('opacity', '0');
+                
+                // Déplacer très loin
+                customer.setAttribute('position', '0 -1000 0');
+                customer.object3D.position.set(0, -1000, 0);
+                
+                console.log('✅ Customer destroyed with multiple methods');
+            } else {
+                console.log('❌ Customer or customer.object3D is NULL!');
+            }
+            
+            if (debugEl) debugEl.textContent = '✅ OBJETS DÉTRUITS!';
+
+            // Nettoyer les références après un délai
+            setTimeout(() => {
+                if (cup && cup.parentNode) {
+                    cup.parentNode.removeChild(cup);
+                }
+                
+                const idx = spawnedObjects.indexOf(cup);
+                if (idx > -1) {
+                    spawnedObjects.splice(idx, 1);
+                }
+                
+                removeCustomer(customer);
+                
+                // Spawn nouveau client
+                setTimeout(() => {
+                    coffeeDelivered = false;
+                    spawnCustomer();
+                }, 2000);
+            }, 500);
         }
 
     }, 100);
