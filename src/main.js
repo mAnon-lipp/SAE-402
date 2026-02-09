@@ -4,7 +4,7 @@ import 'aframe-physics-system';
 
 // Import des composants AR personnalisés
 import './components/ar-plane-detection.js';
-import './components/ar-meshing.js';
+// import './components/ar-meshing.js'; // Désactivé pour éviter conflit avec plane-detection
 
 /* global THREE */
 
@@ -107,20 +107,21 @@ window.addEventListener('load', () => {
 
             const cup = document.createElement('a-entity');
             cup.setAttribute('gltf-model', 'url(models/Coffeecup.glb)');
-            cup.setAttribute('scale', '0.08 0.08 0.08');
+            cup.setAttribute('scale', '0.15 0.15 0.15');
             cup.setAttribute('position', `${cupPos.x} ${cupPos.y} ${cupPos.z}`);
             cup.setAttribute('dynamic-body', 'mass:0.3;linearDamping:0.5;angularDamping:0.5');
-            cup.setAttribute('class', 'clickable grabbable');
-            cup.classList.add('coffee-cup'); // Ajouter classe spécifique
+            cup.setAttribute('class', 'clickable grabbable coffee-cup');
             cup.id = `coffee-cup-${Date.now()}`;
 
-            // Marquer comme objet café pour le grab
+            // MARQUAGE MULTIPLE pour garantir la détection
             cup.dataset.isCoffee = 'true';
+            cup.dataset.coffeeItem = 'true';
+            cup.setAttribute('data-coffee', 'true');
 
             sceneEl.appendChild(cup);
             spawnedObjects.push(cup);
 
-            console.log('☕ Tasse de café créée à:', cupPos);
+            console.log('☕ Tasse de café créée à:', cupPos, '| ID:', cup.id);
             if (debugEl) debugEl.textContent = '☕ Café prêt!';
         }
 
@@ -138,17 +139,16 @@ window.addEventListener('load', () => {
                 coffeeAudio.play().catch(e => console.log('Audio error:', e));
             }
 
-            // Attendre 1.5 secondes puis faire apparaître la tasse
+            // Attendre 3 secondes pour laisser l'audio se terminer
             setTimeout(() => {
                 spawnCoffeeCup(machineEntity);
                 coffeeMachineLock = false; // Débloquer pour le prochain café
-            }, 1500);
+            }, 3000);
         }
 
         // --- TRASHCAN DELETION SYSTEM ---
         const trashcans = []; // Liste des poubelles dans la scène
         const TRASH_RADIUS = 0.2; // Rayon de détection pour la suppression
-        let giveCoffeeLock = false; // Lock pour donner le café
 
         function removeObjectFromScene(objEl) {
             if (!objEl || !objEl.parentNode) return;
@@ -322,8 +322,8 @@ window.addEventListener('load', () => {
                 welcomePanel.parentNode.removeChild(welcomePanel);
                 welcomePanel = null;
                 debugEl.textContent = '🟢 PANEL FERMÉ';
-                // Trigger initial customer spawn
-                setTimeout(spawnCustomer, 2000);
+                // Spawn le client après 5 secondes
+                setTimeout(spawnCustomer, 5000);
             }
         }
 
@@ -601,23 +601,7 @@ window.addEventListener('load', () => {
                         domOverlay: { root: document.getElementById('overlay') }
                     });
 
-                    console.log('[Main] Session AR créée, features:', xrSession.enabledFeatures);
-                    
-                    // Vérifier plane-detection
-                    const hasPlaneDetection = xrSession.enabledFeatures?.includes('plane-detection');
-                    console.log('[Main] 🟢 Plane Detection disponible:', hasPlaneDetection);
-                    if (!hasPlaneDetection) {
-                        console.warn('⚠️ ATTENTION: plane-detection n\'est pas activé sur ce casque!');
-                        if (debugEl) debugEl.textContent = '⚠️ Plane detection indisponible';
-                    }
-                    
                     sceneEl.renderer.xr.setSession(xrSession);
-                    
-                    // Force trigger enter-vr event pour les composants
-                    setTimeout(() => {
-                        sceneEl.emit('enter-vr');
-                        console.log('[Main] Event enter-vr émis');
-                    }, 100);
 
                 // Controllers Three.js
                 const ctrl0 = sceneEl.renderer.xr.getController(0);
@@ -790,59 +774,6 @@ window.addEventListener('load', () => {
                             }
                         } else {
                             if (menuToggleLock) menuToggleLock = false;
-                        }
-                    }
-
-                    // RIGHT CONTROLLER - Debug buttons + Give coffee
-                    if (source.handedness === 'right' && source.gamepad) {
-                        // Debug: afficher tous les boutons pressés
-                        for (let bi = 0; bi < source.gamepad.buttons.length; bi++) {
-                            if (source.gamepad.buttons[bi].pressed) {
-                                debugEl.textContent = `BTN ${bi} | Grab:${grabbed} | Cup:${currentGrabbedEl ? 'yes' : 'no'} | Cust:${customers.length}`;
-                            }
-                        }
-
-                        // Essayer TOUS les boutons possibles pour A (4, 3, ou autre)
-                        const aBtn = source.gamepad.buttons[4] || source.gamepad.buttons[3];
-
-                        if (aBtn && aBtn.pressed && !giveCoffeeLock) {
-                            debugEl.textContent = `A pressed! Grab:${grabbed}`;
-                            
-                            // Si on tient un café, le donner au client
-                            if (grabbed && currentGrabbedEl) {
-                                const isCoffee = 
-                                    (currentGrabbedEl.classList && currentGrabbedEl.classList.contains('coffee-cup')) ||
-                                    (currentGrabbedEl.dataset && currentGrabbedEl.dataset.isCoffee === 'true') ||
-                                    (currentGrabbedEl.id && currentGrabbedEl.id.includes('coffee-cup'));
-                                
-                                debugEl.textContent = `Coffee:${isCoffee} Cust:${customers.length}`;
-                                
-                                if (isCoffee && customers.length > 0) {
-                                    giveCoffeeLock = true;
-                                    console.log('✅ COFFEE GIVEN BY BUTTON A!');
-                                    showARNotification('✅ THANKS! Perfect coffee!', 3000);
-                                    debugEl.textContent = '✅ Café livré!';
-
-                                    // Supprimer la tasse
-                                    const cupIdx = spawnedObjects.indexOf(currentGrabbedEl);
-                                    if (cupIdx > -1) spawnedObjects.splice(cupIdx, 1);
-                                    if (currentGrabbedEl.body && currentGrabbedEl.body.world) {
-                                        currentGrabbedEl.body.world.removeBody(currentGrabbedEl.body);
-                                    }
-                                    if (currentGrabbedEl.parentNode) currentGrabbedEl.parentNode.removeChild(currentGrabbedEl);
-
-                                    // Reset grab state
-                                    grabbed = false;
-                                    grabController = null;
-                                    currentGrabbedEl = null;
-
-                                    // Supprimer le client
-                                    const customer = customers[0];
-                                    removeCustomer(customer);
-
-                                    setTimeout(() => { giveCoffeeLock = false; }, 500);
-                                }
-                            }
                         }
                     }
 
@@ -1288,35 +1219,70 @@ window.addEventListener('load', () => {
 
         // --- SIMPLE CUSTOMER SYSTEM ---
         const customers = [];
-        const QUEUE_POS = { x: 0, y: 0.75, z: -1.5 }; // z=-1.5m devant
 
         function spawnCustomer() {
             // Limite à 1 client pour le test
-            if (customers.length > 0) return;
+            if (customers.length > 0) {
+                console.log('Client déjà présent');
+                return;
+            }
 
+            console.log('🧍 Spawning customer...');
             debugEl.textContent = '🧍 NEW CUSTOMER';
+
+            // Récupérer la position de la caméra
+            const cam = document.getElementById('cam');
+            if (!cam || !cam.object3D) {
+                console.error('Camera not found!');
+                return;
+            }
+
+            const camPos = new THREE.Vector3();
+            const camDir = new THREE.Vector3();
+            cam.object3D.getWorldPosition(camPos);
+            cam.object3D.getWorldDirection(camDir);
+
+            // Position du client à 1.5m devant, au niveau du sol
+            const customerPos = camPos.clone().add(camDir.multiplyScalar(-1.5));
+            customerPos.y = 0; // Au niveau du sol
 
             // Modèle 3D du client (Punk)
             const customer = document.createElement('a-entity');
             customer.setAttribute('gltf-model', 'url(models/Punk.glb)');
-            customer.setAttribute('position', `${QUEUE_POS.x} 0 ${QUEUE_POS.z}`); // y=0 car le modèle est sur le sol
-            customer.setAttribute('scale', '1 1 1'); // Ajuster selon la taille du modèle
-            customer.setAttribute('rotation', '0 0 0'); // Face à l'utilisateur
+            customer.setAttribute('position', `${customerPos.x} ${customerPos.y} ${customerPos.z}`);
+            customer.setAttribute('scale', '1 1 1');
+            customer.setAttribute('rotation', '0 0 0');
             customer.classList.add('customer');
             customer.id = `customer-${Date.now()}`;
+            customer.dataset.needsCoffee = 'true';
+
+            // ZONE DE DÉTECTION VISIBLE (Cercle vert au sol)
+            const deliveryZone = document.createElement('a-ring');
+            deliveryZone.setAttribute('radius-inner', '0.4');
+            deliveryZone.setAttribute('radius-outer', '0.6');
+            deliveryZone.setAttribute('color', '#00ff00');
+            deliveryZone.setAttribute('opacity', '0.5');
+            deliveryZone.setAttribute('rotation', '-90 0 0');
+            deliveryZone.setAttribute('position', '0 0.01 0');
+            deliveryZone.setAttribute('material', 'shader: flat; transparent: true');
+            deliveryZone.classList.add('delivery-zone');
+            customer.appendChild(deliveryZone);
 
             // Panneau de commande (Texte)
             const text = document.createElement('a-text');
-            text.setAttribute('value', 'Grab coffee + Press A!');
+            text.setAttribute('value', 'COFFEE PLEASE!\nBring me a cup!');
             text.setAttribute('align', 'center');
-            text.setAttribute('position', '0 2.2 0.3'); // Au dessus de la tête (modèle ~1.8m)
-            text.setAttribute('scale', '1 1 1');
+            text.setAttribute('position', '0 2.1 0.3');
+            text.setAttribute('scale', '1.2 1.2 1.2');
             text.setAttribute('color', '#FFD700');
             text.setAttribute('font', 'mozillavr');
             customer.appendChild(text);
 
             sceneEl.appendChild(customer);
             customers.push(customer);
+
+            console.log('✅ Customer spawned at:', customerPos);
+            console.log('👥 Total customers:', customers.length);
 
             showARNotification('☕ New Customer!', 2000);
         }
@@ -1332,76 +1298,109 @@ window.addEventListener('load', () => {
             console.log('Client despawned via removeCustomer');
         }
 
-        // Rayon de détection pour la livraison de café (plus large pour faciliter)
-        const CUSTOMER_RADIUS = 1.2;
+        // Rayon de détection (0.5m = zone visible verte)
+        const CUSTOMER_RADIUS = 0.5;
         let lastCoffeeDebug = 0;
-        let coffeeDelivered = false; // Flag pour éviter les doubles détections
+        let coffeeDelivered = false;
 
         function checkCoffeeDelivery() {
-            if (coffeeDelivered) return; // Éviter les appels multiples
+            if (coffeeDelivered) return;
             if (customers.length === 0) return;
-            if (spawnedObjects.length === 0) return;
 
-            const customer = customers[0]; // Premier client seulement
+            const customer = customers[0];
             if (!customer || !customer.object3D) return;
 
             const custPos = new THREE.Vector3();
             customer.object3D.getWorldPosition(custPos);
 
-            // Chercher les tasses directement avec une boucle simple
-            for (let i = spawnedObjects.length - 1; i >= 0; i--) {
-                const obj = spawnedObjects[i];
-                if (!obj) continue;
+            // Chercher TOUTES les tasses (même celles qui ne sont pas dans spawnedObjects)
+            const allCups = sceneEl.querySelectorAll('.coffee-cup');
+            
+            // Debug détaillé
+            const now = Date.now();
+            if (now - lastCoffeeDebug > 1000) {
+                lastCoffeeDebug = now;
+                console.log('=== COFFEE DELIVERY CHECK ===');
+                console.log('Customer at:', custPos.x.toFixed(2), custPos.y.toFixed(2), custPos.z.toFixed(2));
+                console.log('Total coffee cups found:', allCups.length);
+                console.log('SpawnedObjects length:', spawnedObjects.length);
+            }
 
-                // Vérifier si c'est un café
-                const isCoffee = 
-                    (obj.classList && obj.classList.contains('coffee-cup')) ||
-                    (obj.dataset && obj.dataset.isCoffee === 'true') ||
-                    (obj.id && obj.id.includes('coffee-cup'));
-
-                if (!isCoffee) continue;
-                if (!obj.object3D) continue;
+            allCups.forEach((cup, index) => {
+                if (!cup || !cup.object3D) return;
 
                 const cupPos = new THREE.Vector3();
-                obj.object3D.getWorldPosition(cupPos);
+                cup.object3D.getWorldPosition(cupPos);
 
-                // Distance horizontale
-                const distHoriz = Math.sqrt(
+                // Distance 2D (X et Z seulement) pour ignorer la hauteur
+                const distanceXZ = Math.sqrt(
                     Math.pow(custPos.x - cupPos.x, 2) + 
                     Math.pow(custPos.z - cupPos.z, 2)
                 );
 
-                // Debug throttled
-                const now = Date.now();
+                // Debug pour chaque tasse
                 if (now - lastCoffeeDebug > 1000) {
-                    lastCoffeeDebug = now;
-                    debugEl.textContent = `☕ D:${distHoriz.toFixed(1)}m (need <${CUSTOMER_RADIUS})`;
+                    console.log(`Cup ${index}: pos(${cupPos.x.toFixed(2)}, ${cupPos.y.toFixed(2)}, ${cupPos.z.toFixed(2)}) | dist: ${distanceXZ.toFixed(2)}m`);
                 }
 
-                // LIVRAISON!
-                if (distHoriz < CUSTOMER_RADIUS) {
-                    coffeeDelivered = true; // Bloquer les appels suivants
+                // Mise à jour du debug visuel
+                if (index === 0) { // Afficher seulement pour la première tasse
+                    debugEl.textContent = `☕ Distance: ${distanceXZ.toFixed(2)}m | Zone: ${CUSTOMER_RADIUS}m`;
+                }
+
+                // DÉTECTION DE LIVRAISON
+                if (distanceXZ < CUSTOMER_RADIUS && !coffeeDelivered) {
+                    coffeeDelivered = true;
                     
-                    console.log('✅ COFFEE DELIVERED!');
+                    console.log('🎉🎉🎉 COFFEE DELIVERED! 🎉🎉🎉');
+                    console.log('Distance XZ was:', distanceXZ.toFixed(3), 'm');
+                    console.log('Cup ID:', cup.id);
+                    
                     showARNotification('✅ THANKS! Perfect coffee!', 3000);
                     debugEl.textContent = '✅ Café livré!';
 
-                    // Supprimer la tasse
-                    spawnedObjects.splice(i, 1);
-                    if (obj.body && obj.body.world) {
-                        obj.body.world.removeBody(obj.body);
+                    // Animation de la zone de livraison (flash vert)
+                    const zone = customer.querySelector('.delivery-zone');
+                    if (zone) {
+                        zone.setAttribute('color', '#00ff00');
+                        zone.setAttribute('opacity', '1');
                     }
-                    if (obj.parentNode) obj.parentNode.removeChild(obj);
 
-                    // Supprimer le client
-                    removeCustomer(customer);
+                    // Supprimer la tasse après un court délai (effet visuel)
+                    setTimeout(() => {
+                        // Retirer de spawnedObjects si présent
+                        const idx = spawnedObjects.indexOf(cup);
+                        if (idx > -1) spawnedObjects.splice(idx, 1);
+                        
+                        // Retirer le corps physique
+                        if (cup.body && cup.body.world) {
+                            try {
+                                cup.body.world.removeBody(cup.body);
+                            } catch (e) {
+                                console.log('Physics body already removed');
+                            }
+                        }
+                        
+                        // Retirer du DOM
+                        if (cup.parentNode) {
+                            cup.parentNode.removeChild(cup);
+                            console.log('Cup removed from scene');
+                        }
+                    }, 300);
 
-                    // Reset flag après 1 seconde
-                    setTimeout(() => { coffeeDelivered = false; }, 1000);
-                    
-                    return; // Sortir immédiatement
+                    // Supprimer le client après 1 seconde
+                    setTimeout(() => {
+                        removeCustomer(customer);
+                        console.log('Customer removed');
+                        
+                        // Spawn nouveau client après 3 secondes
+                        setTimeout(() => {
+                            coffeeDelivered = false;
+                            spawnCustomer();
+                        }, 3000);
+                    }, 1000);
                 }
-            }
+            });
         }
 
     }, 100);
