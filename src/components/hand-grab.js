@@ -27,6 +27,13 @@ AFRAME.registerComponent('controller-grab', {
     tick: function () {
         // Si on tient un objet, le déplacer avec la manette
         if (this.grabbedEl) {
+            // Vérifier si l'objet est marqué comme en cours de suppression
+            if (this.grabbedEl.dataset.deleting === 'true') {
+                console.log('⚠️ Object being deleted, force release');
+                this.grabbedEl = null;
+                return;
+            }
+            
             const controllerPos = new THREE.Vector3();
             this.el.object3D.getWorldPosition(controllerPos);
 
@@ -59,6 +66,9 @@ AFRAME.registerComponent('controller-grab', {
         let closestDist = this.grabDistance;
 
         grabbables.forEach((el) => {
+            // Ignorer les objets en cours de suppression
+            if (el.dataset.deleting === 'true') return;
+            
             const objPos = new THREE.Vector3();
             el.object3D.getWorldPosition(objPos);
 
@@ -117,6 +127,13 @@ AFRAME.registerComponent('hand-grab', {
 
         // Si on tient un objet, le déplacer avec la main
         if (this.grabbedEl) {
+            // Vérifier si l'objet est marqué comme en cours de suppression
+            if (this.grabbedEl.dataset.deleting === 'true') {
+                console.log('⚠️ Object being deleted, force release');
+                this.grabbedEl = null;
+                return;
+            }
+            
             this.grabbedEl.object3D.position.copy(handPos);
 
             // IMPORTANT: Synchroniser aussi avec le body CANNON.js
@@ -136,6 +153,9 @@ AFRAME.registerComponent('hand-grab', {
 
         grabbables.forEach((el) => {
             if (this.grabbedEl) return; // Déjà trouvé
+            
+            // Ignorer les objets en cours de suppression
+            if (el.dataset.deleting === 'true') return;
 
             const objPos = new THREE.Vector3();
             el.object3D.getWorldPosition(objPos);

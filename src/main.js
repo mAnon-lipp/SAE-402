@@ -706,7 +706,8 @@ window.addEventListener('load', () => {
             checkTrashcanCollisions();
 
             // --- COFFEE DELIVERY CHECK (CONTINUOUS) ---
-            checkCoffeeDelivery();
+            // ❌ SUPPRIMÉ - Utilise maintenant les collisions physiques via événement 'collide'
+            // checkCoffeeDelivery();
 
             // --- MANUEL RAYCASTER & DIAGNOSTICS ---
 
@@ -1260,10 +1261,18 @@ window.addEventListener('load', () => {
             customer.id = `customer-${Date.now()}`;
             customer.dataset.needsCoffee = 'true';
 
-            // ZONE DE DÉTECTION VISIBLE (Cercle vert au sol)
+            // CORPS PHYSIQUE POUR LA COLLISION (CANNON.js)
+            // Entité enfant invisible avec static-body pour la détection
+            // Positionnée à hauteur de poitrine (y=1.0 relatif) pour mieux détecter les objets tenus
+            const collisionBody = document.createElement('a-entity');
+            collisionBody.setAttribute('position', '0 1.0 0');
+            collisionBody.setAttribute('static-body', 'shape: sphere; sphereRadius: 0.4');
+            customer.appendChild(collisionBody);
+
+            // ZONE DE DÉTECTION VISIBLE (Cercle vert au sol - visuel seulement)
             const deliveryZone = document.createElement('a-ring');
-            deliveryZone.setAttribute('radius-inner', '0.9');
-            deliveryZone.setAttribute('radius-outer', '1.2');
+            deliveryZone.setAttribute('radius-inner', '0.3');
+            deliveryZone.setAttribute('radius-outer', '0.4');
             deliveryZone.setAttribute('color', '#00ff00');
             deliveryZone.setAttribute('opacity', '0.7');
             deliveryZone.setAttribute('rotation', '-90 0 0');
@@ -1271,6 +1280,28 @@ window.addEventListener('load', () => {
             deliveryZone.setAttribute('material', 'shader: flat; transparent: true');
             deliveryZone.classList.add('delivery-zone');
             customer.appendChild(deliveryZone);
+
+            // ÉCOUTEUR DE COLLISION PHYSIQUE (sur l'entité collisionBody)
+            collisionBody.addEventListener('collide', (evt) => {
+                if (coffeeDelivered) return; // Déjà livré
+
+                const otherEl = evt.detail.body.el;
+                if (!otherEl) return;
+
+                // Vérifier si c'est une tasse de café
+                const isCoffee = 
+                    otherEl.classList.contains('coffee-cup') || 
+                    otherEl.dataset.isCoffee === 'true' || 
+                    otherEl.dataset.coffeeItem === 'true' ||
+                    otherEl.getAttribute('data-coffee') === 'true';
+
+                if (isCoffee) {
+                    console.log('💥 COLLISION DÉTECTÉE! Café touche le client!');
+                    const ring = customer.querySelector('.delivery-zone');
+                    if (ring) ring.setAttribute('color', 'gold');
+                    handleCoffeeDelivery(otherEl, customer);
+                }
+            });
 
             // Panneau de commande (Texte)
             const text = document.createElement('a-text');
@@ -1302,175 +1333,90 @@ window.addEventListener('load', () => {
             console.log('Client despawned via removeCustomer');
         }
 
-        // Détection continue de livraison de café
-        const DELIVERY_RADIUS = 1.2;
+        // ✅ NOUVEAU SYSTÈME DE LIVRAISON : Utilise les collisions physiques CANNON.js
+        // Les clients ont un static-body avec shape: sphere
+        // L'événement 'collide' est écouté sur chaque client (voir spawnCustomer)
         let coffeeDelivered = false;
 
+        // Cette fonction n'est plus nécessaire mais gardée pour éviter les erreurs
         function checkCoffeeDelivery() {
-            // DEBUG PERMANENT - Afficher l'état
-            if (debugEl) {
-                debugEl.textContent = `👥 Clients: ${customers.length} | ☕ Tasses: ${spawnedObjects.filter(o => o && o.classList && o.classList.contains('coffee-cup')).length} | 🚫 Delivered: ${coffeeDelivered}`;
-            }
-
-            // Si pas de client, rien à faire
-            if (customers.length === 0) return;
-            // Si déjà livré, rien à faire
-            if (coffeeDelivered) return;
-
-            const customer = customers[0];
-            if (!customer || !customer.object3D) return;
-
-            // Position du client
-            const custPos = new THREE.Vector3();
-            customer.object3D.getWorldPosition(custPos);
-
-            // Compter et vérifier les tasses
-            let cupCount = 0;
-            let minDistance = 999;
-
-            // Vérifier TOUS les objets spawnés (pas de querySelector)
-            spawnedObjects.forEach(obj => {
-                if (!obj || !obj.object3D) return;
-                
-                // Vérifier si c'est une tasse de café
-                const isCoffee = obj.classList.contains('coffee-cup');
-                if (!isCoffee) return;
-
-                cupCount++;
-
-                // Position de la tasse
-                const cupPos = new THREE.Vector3();
-                obj.object3D.getWorldPosition(cupPos);
-
-                // Distance 2D (ignore la hauteur)
-                const distanceXZ = Math.sqrt(
-                    Math.pow(custPos.x - cupPos.x, 2) + 
-                    Math.pow(custPos.z - cupPos.z, 2)
-                );
-
-                if (distanceXZ < minDistance) minDistance = distanceXZ;
-
-                // Afficher la distance en temps réel
-                if (debugEl && cupCount === 1) {
-                    debugEl.textContent = `☕ DISTANCE: ${distanceXZ.toFixed(2)}m / ${DELIVERY_RADIUS}m ${distanceXZ < DELIVERY_RADIUS ? '✅✅ DANS LA ZONE!' : ''}`;
-                }
-
-                // LIVRAISON DÈS QUE C'EST DANS LA ZONE
-                if (distanceXZ < DELIVERY_RADIUS) {
-                    console.log('🎯 CUP IN RANGE! Triggering delivery...');
-                    handleCoffeeDelivery(obj, customer);
-                }
-            });
+            // Système de collision physique actif - cette fonction est désormais obsolète
+            return;
         }
 
         function handleCoffeeDelivery(cup, customer) {
-            // Double vérification
             if (coffeeDelivered) {
-                console.log('⚠️ DELIVERY already processed, skipping...');
+                showARNotification('⚠️ Already delivered!', 1000);
                 return;
             }
             
-            console.log('🎉🎉🎉 COFFEE DELIVERY TRIGGERED! 🎉🎉🎉');
-            console.log('Cup object:', cup);
-            console.log('Cup ID:', cup ? cup.id : 'NULL');
-            console.log('Customer object:', customer);
-            console.log('Customer ID:', customer ? customer.id : 'NULL');
-            
-            // Marquer comme livré IMMÉDIATEMENT pour éviter double appel
             coffeeDelivered = true;
+            showARNotification('🎉 DELIVERY STARTED!', 1000);
+            if (debugEl) debugEl.textContent = '🎉 DELIVERY!';
             
-            // FORCER LE LÂCHER si on tient cette tasse
-            if (currentGrabbedEl === cup) {
-                grabbed = false;
-                grabController = null;
-                currentGrabbedEl = null;
-                console.log('🔓 Forced release of grabbed cup');
-            }
+            if (cup) cup.dataset.deleting = 'true';
+            if (customer) customer.dataset.deleting = 'true';
             
-            // Notification AR
-            showARNotification('✅ THANKS! Perfect coffee!', 3000);
-            if (debugEl) debugEl.textContent = '✅ LIVRAISON! DESTRUCTION...';
-
-            console.log('🗑️ STARTING AGGRESSIVE DELETION...');
-
-            // MÉTHODE ULTRA AGRESSIVE : TOUT EN MÊME TEMPS
+            // � MARQUER LES OBJETS COMME EN COURS DE SUPPRESSION (empêche re-grab)
+            if (cup) cup.dataset.deleting = 'true';
+            if (customer) customer.dataset.deleting = 'true';
             
-            // 1. TASSE : Multiples méthodes simultanées
-            if (cup && cup.object3D) {
-                console.log('🔥 Destroying cup with ALL methods...');
-                
-                // Méthode 1 : Scale à zéro
-                cup.setAttribute('scale', '0 0 0');
-                cup.object3D.scale.set(0, 0, 0);
-                
-                // Méthode 2 : Invisible
-                cup.setAttribute('visible', 'false');
-                cup.object3D.visible = false;
-                
-                // Méthode 3 : Opacité zéro
-                cup.setAttribute('opacity', '0');
-                
-                // Méthode 4 : Déplacer très loin
-                cup.setAttribute('position', '0 -1000 0');
-                cup.object3D.position.set(0, -1000, 0);
-                
-                // Méthode 5 : Désactiver physique
-                if (cup.body) {
-                    cup.body.collisionResponse = false;
-                    cup.body.type = 0;
-                    cup.body.mass = 0;
+            // Forcer le lâchage
+            if (cup) {
+                const controllers = document.querySelectorAll('[controller-grab], [hand-grab]');
+                controllers.forEach(ctrl => {
+                    const controllerGrabComp = ctrl.components['controller-grab'];
+                    const handGrabComp = ctrl.components['hand-grab'];
+                    if (controllerGrabComp && controllerGrabComp.grabbedEl === cup) {
+                        controllerGrabComp.grabbedEl = null;
+                    }
+                    if (handGrabComp && handGrabComp.grabbedEl === cup) {
+                        handGrabComp.grabbedEl = null;
+                    }
+                });
+                if (currentGrabbedEl === cup) {
+                    grabbed = false;
+                    grabController = null;
+                    currentGrabbedEl = null;
                 }
-                
-                console.log('✅ Cup destroyed with multiple methods');
-            } else {
-                console.log('❌ Cup or cup.object3D is NULL!');
             }
             
-            // 2. CLIENT : Mêmes méthodes
-            if (customer && customer.object3D) {
-                console.log('🔥 Destroying customer with ALL methods...');
-                
-                // Scale à zéro
-                customer.setAttribute('scale', '0 0 0');
-                customer.object3D.scale.set(0, 0, 0);
-                
-                // Invisible
-                customer.setAttribute('visible', 'false');
-                customer.object3D.visible = false;
-                
-                // Opacité zéro
-                customer.setAttribute('opacity', '0');
-                
-                // Déplacer très loin
-                customer.setAttribute('position', '0 -1000 0');
-                customer.object3D.position.set(0, -1000, 0);
-                
-                console.log('✅ Customer destroyed with multiple methods');
-            } else {
-                console.log('❌ Customer or customer.object3D is NULL!');
+            // Nettoyer les tableaux
+            if (cup) {
+                const cupIdx = spawnedObjects.indexOf(cup);
+                if (cupIdx > -1) spawnedObjects.splice(cupIdx, 1);
+            }
+            if (customer) {
+                const custIdx = customers.indexOf(customer);
+                if (custIdx > -1) customers.splice(custIdx, 1);
             }
             
-            if (debugEl) debugEl.textContent = '✅ OBJETS DÉTRUITS!';
-
-            // Nettoyer les références après un délai
-            setTimeout(() => {
+            // SUPPRESSION IMMEDIATE
+            requestAnimationFrame(() => {
                 if (cup && cup.parentNode) {
+                    if (cup.body && cup.body.world) {
+                        try { cup.body.world.removeBody(cup.body); } catch(e) {}
+                    }
                     cup.parentNode.removeChild(cup);
+                    showARNotification('☕ Cup removed!', 1000);
                 }
-                
-                const idx = spawnedObjects.indexOf(cup);
-                if (idx > -1) {
-                    spawnedObjects.splice(idx, 1);
+                if (customer && customer.parentNode) {
+                    customer.querySelectorAll('[static-body], [dynamic-body]').forEach(child => {
+                        if (child.body && child.body.world) {
+                            try { child.body.world.removeBody(child.body); } catch(e) {}
+                        }
+                    });
+                    customer.parentNode.removeChild(customer);
+                    showARNotification('👤 Customer removed!', 1000);
                 }
-                
-                removeCustomer(customer);
-                
-                // Spawn nouveau client
+                showARNotification('✅ COMPLETE!', 2000);
+                if (debugEl) debugEl.textContent = '✅ COMPLETE!';
                 setTimeout(() => {
                     coffeeDelivered = false;
                     spawnCustomer();
-                }, 2000);
-            }, 500);
+                    showARNotification('☕ New customer!', 2000);
+                }, 3000);
+            });
         }
 
     }, 100);
