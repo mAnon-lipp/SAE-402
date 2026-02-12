@@ -209,6 +209,9 @@ AFRAME.registerComponent('grabbable', {
             this.isGrabbed = true;
             this.previousPositions = []; // Reset l'historique
 
+            // ✅ MARQUER COMME GRABBÉ (pour détection d'intersection)
+            this.el.dataset.isGrabbed = 'true';
+
             const mat = this.el.getAttribute('material');
             if (mat) {
                 this.originalColor = mat.color || '#4CC3D9';
@@ -226,7 +229,6 @@ AFRAME.registerComponent('grabbable', {
                 this.el.body.angularVelocity.set(0, 0, 0);
                 // Mettre en mode "sleep" pour éviter les calculs
                 this.el.body.type = 2; // KINEMATIC
-                console.log('✊ Physique désactivée pour grab');
             }
         });
 
@@ -235,6 +237,9 @@ AFRAME.registerComponent('grabbable', {
             const finalVelocity = this.calculateAverageVelocity();
 
             this.isGrabbed = false;
+
+            // ✅ RETIRER LE MARQUAGE
+            this.el.dataset.isGrabbed = 'false';
 
             if (this.originalColor) {
                 this.el.setAttribute('material', 'color', this.originalColor);
@@ -265,8 +270,6 @@ AFRAME.registerComponent('grabbable', {
                     (Math.random() - 0.5) * 2,
                     (Math.random() - 0.5) * 2
                 );
-
-                console.log(`🚀 Lancé! Vélocité: (${vx.toFixed(2)}, ${vy.toFixed(2)}, ${vz.toFixed(2)})`);
             }
         });
     },

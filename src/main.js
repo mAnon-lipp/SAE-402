@@ -84,6 +84,46 @@ window.addEventListener('load', () => {
         let coffeeMachineLock = false; // Prevents multiple coffee spawns
         let coffeeAudio = null; // Audio element for coffee sound
 
+        // --- 🔍 SYSTÈME DE DEBUG AR ULTRA-VISIBLE ---
+        let arDebugPanel = null;
+        let arDebugText = null;
+
+        function createARDebugPanel() {
+            const cam = document.getElementById('cam');
+            if (!cam) return;
+
+            arDebugPanel = document.createElement('a-entity');
+            arDebugPanel.setAttribute('position', '0 0.15 -0.8'); // Devant les yeux
+            
+            // Fond noir
+            const bg = document.createElement('a-plane');
+            bg.setAttribute('width', '0.6');
+            bg.setAttribute('height', '0.2');
+            bg.setAttribute('color', '#000000');
+            bg.setAttribute('opacity', '0.8');
+            arDebugPanel.appendChild(bg);
+            
+            // Texte de debug
+            arDebugText = document.createElement('a-text');
+            arDebugText.setAttribute('value', 'DEBUG: Init...');
+            arDebugText.setAttribute('align', 'center');
+            arDebugText.setAttribute('position', '0 0 0.01');
+            arDebugText.setAttribute('width', '1.2');
+            arDebugText.setAttribute('color', '#00ff00');
+            arDebugText.setAttribute('wrap-count', '30');
+            arDebugPanel.appendChild(arDebugText);
+            
+            cam.appendChild(arDebugPanel);
+            console.log('🔍 AR Debug Panel created');
+        }
+
+        function updateARDebug(message) {
+            if (arDebugText) {
+                arDebugText.setAttribute('value', message);
+            }
+            console.log('🔍 AR DEBUG:', message);
+        }
+
         // --- COFFEE MACHINE AUDIO SETUP ---
         function initCoffeeAudio() {
             coffeeAudio = new Audio('/sounds/public_assets_café.MP3');
@@ -122,6 +162,7 @@ window.addEventListener('load', () => {
             spawnedObjects.push(cup);
 
             console.log('☕ Tasse de café créée à:', cupPos, '| ID:', cup.id);
+            updateARDebug('☕ Coffee created!');
             if (debugEl) debugEl.textContent = '☕ Café prêt!';
         }
 
@@ -603,6 +644,12 @@ window.addEventListener('load', () => {
 
                     sceneEl.renderer.xr.setSession(xrSession);
 
+                    // 🔍 CRÉER LE PANNEAU DE DEBUG AR
+                    setTimeout(() => {
+                        createARDebugPanel();
+                        updateARDebug('AR Ready! Waiting for coffee...');
+                    }, 1500);
+
                 // Controllers Three.js
                 const ctrl0 = sceneEl.renderer.xr.getController(0);
                 const ctrl1 = sceneEl.renderer.xr.getController(1);
@@ -705,9 +752,8 @@ window.addEventListener('load', () => {
             // --- TRASHCAN COLLISION CHECK ---
             checkTrashcanCollisions();
 
-            // --- COFFEE DELIVERY CHECK (CONTINUOUS) ---
-            // ❌ SUPPRIMÉ - Utilise maintenant les collisions physiques via événement 'collide'
-            // checkCoffeeDelivery();
+            // --- ✅ COFFEE DELIVERY CHECK (INTERSECTION THREE.JS) ---
+            checkCoffeeIntersection();
 
             // --- MANUEL RAYCASTER & DIAGNOSTICS ---
 
@@ -1183,23 +1229,236 @@ window.addEventListener('load', () => {
         // Add checkCleaning to loop (using setInterval or inside xrLoop)
         setInterval(checkCleaning, 50); // 20 times per second
 
+        // --- ✅ COFFEE INTERSECTION DETECTION - VERSION DEBUG COMPLÈTE ---
+        let lastDebugUpdate = 0;
+        
+        function checkCoffeeIntersection() {
+            if (coffeeDelivered) return;
+
+            // Throttle debug updates (max 2 fois par seconde)
+            const now = Date.now();
+            const shouldDebug = (now - lastDebugUpdate) > 500;
+
+            // 🔍 DIAGNOSTIC 1 : Trouver les cafés
+            const allCoffees = document.querySelectorAll('.coffee-cup');
+            
+            if (shouldDebug) {
+                lastDebugUpdate = now;
+                updateARDebug(`Coffees: ${allCoffees.length} | Customers: ${customers.length}`);
+            }
+            
+            if (allCoffees.length === 0) {
+                if (shouldDebug) updateARDebug('NO COFFEE FOUND!');
+                return;
+            }
+            
+            if (customers.length === 0) {
+                if (shouldDebug) updateARDebug('NO CUSTOMER!');
+                return;
+            }
+
+            // 🔍 DIAGNOSTIC 2 : Vérifier uniquement le PREMIER client de la queue
+            if (customers.length === 0) {
+                if (shouldDebug) updateARDebug('NO CUSTOMER!');
+                return;
+            }
+            
+            // ✅ ON NE SERT QUE LE PREMIER CLIENT (position 0)
+            const firstCustomer = customers[0];
+            if (!firstCustomer || firstCustomer.dataset.deleting === 'true') {
+                if (shouldDebug) updateARDebug('First customer invalid');
+                return;
+            }
+
+            allCoffees.forEach((cup, cupIndex) => {
+                if (!cup || !cup.object3D || cup.dataset.deleting === 'true') {
+                    return;
+                }
+
+                // Vérifier UNIQUEMENT avec le premier client
+                if (!firstCustomer.object3D) return;
+
+                try {
+                    const cupPos = new THREE.Vector3();
+                    const customerPos = new THREE.Vector3();
+                    cup.object3D.getWorldPosition(cupPos);
+                    firstCustomer.object3D.getWorldPosition(customerPos);
+
+                    const distance = cupPos.distanceTo(customerPos);
+                    
+                    // 🔍 AFFICHER LA DISTANCE EN TEMPS RÉEL
+                    if (shouldDebug) {
+                        updateARDebug(`Queue: ${customers.length} | DIST: ${distance.toFixed(2)}m`);
+                    }
+
+                    // SEUIL AJUSTÉ POUR LIVRAISON INTENTIONNELLE
+                    const threshold = 0.5; // 50cm - Contact direct
+
+                    if (distance < threshold) {
+                        console.log('🎯 COLLISION with FIRST customer! Distance:', distance);
+                        coffeeDelivered = true;
+                        
+                        updateARDebug(`🎯 DELIVERED!`);
+                        showARNotification(`✅ Served customer 1!`, 2000);
+                        
+                        // Marquer pour suppression
+                        cup.dataset.deleting = 'true';
+                        firstCustomer.dataset.deleting = 'true';
+                        
+                        // Forcer relâchement
+                        document.querySelectorAll('[controller-grab]').forEach(ctrl => {
+                            const comp = ctrl.components['controller-grab'];
+                            if (comp && comp.grabbedEl === cup) comp.grabbedEl = null;
+                        });
+                        
+                        document.querySelectorAll('[hand-grab]').forEach(hand => {
+                            const comp = hand.components['hand-grab'];
+                            if (comp && comp.grabbedEl === cup) comp.grabbedEl = null;
+                        });
+                        
+                        if (currentGrabbedEl === cup) {
+                            grabbed = false;
+                            grabController = null;
+                            currentGrabbedEl = null;
+                        }
+                        
+                        // SUPPRESSION du café
+                        if (cup.body && cup.body.world) {
+                            try { cup.body.world.removeBody(cup.body); } catch(e) {}
+                        }
+                        if (cup.parentNode) cup.parentNode.removeChild(cup);
+                        const cupIdx = spawnedObjects.indexOf(cup);
+                        if (cupIdx > -1) spawnedObjects.splice(cupIdx, 1);
+                        
+                        // SUPPRESSION du premier client
+                        if (firstCustomer.parentNode) firstCustomer.parentNode.removeChild(firstCustomer);
+                        customers.shift(); // Retirer le premier de la queue
+                        
+                        updateARDebug(`✅ Served! ${customers.length} left`);
+                        
+                        // ✅ FAIRE AVANCER TOUTE LA QUEUE
+                        setTimeout(() => {
+                            advanceQueue();
+                        }, 500);
+                        
+                        // Nouveau client dans 3 secondes
+                        setTimeout(() => {
+                            coffeeDelivered = false;
+                            if (customers.length < MAX_QUEUE_SIZE) {
+                                spawnCustomer();
+                            }
+                        }, 3000);
+                    }
+                } catch(e) {
+                    console.error('Error in collision check:', e);
+                    updateARDebug('ERROR: ' + e.message);
+                }
+            });
+        }
+
+        // --- ✅ AVANCER LA QUEUE ---
+        function advanceQueue() {
+            console.log('👥 Advancing queue...');
+            
+            const cam = document.getElementById('cam');
+            if (!cam || !cam.object3D) return;
+            
+            const camPos = new THREE.Vector3();
+            cam.object3D.getWorldPosition(camPos);
+            const camRotY = cam.object3D.rotation.y;
+            
+            // Faire avancer chaque client d'une position
+            customers.forEach((customer, index) => {
+                // Nouvelle position (une place plus proche)
+                const newDistance = QUEUE_START_DISTANCE + (index * QUEUE_SPACING);
+                const offsetX = Math.sin(camRotY) * -newDistance;
+                const offsetZ = Math.cos(camRotY) * -newDistance;
+                
+                const newPos = {
+                    x: camPos.x + offsetX,
+                    y: 0,
+                    z: camPos.z + offsetZ
+                };
+                
+                // Animation de déplacement fluide
+                customer.setAttribute('animation', `property: position; to: ${newPos.x} ${newPos.y} ${newPos.z}; dur: 800; easing: easeInOutQuad`);
+                customer.dataset.queuePosition = index.toString();
+                
+                // Ajouter la bulle au nouveau premier client
+                if (index === 0) {
+                    // Vérifier s'il n'a pas déjà une bulle
+                    if (!customer.querySelector('.speech-bubble')) {
+                        setTimeout(() => {
+                            const speechBubble = document.createElement('a-entity');
+                            speechBubble.setAttribute('position', '0 1.8 0');
+                            speechBubble.classList.add('speech-bubble');
+                            
+                            const bubbleBg = document.createElement('a-plane');
+                            bubbleBg.setAttribute('width', '1.0');
+                            bubbleBg.setAttribute('height', '0.35');
+                            bubbleBg.setAttribute('color', '#ffffff');
+                            bubbleBg.setAttribute('opacity', '0.95');
+                            bubbleBg.setAttribute('shader', 'flat');
+                            bubbleBg.setAttribute('side', 'double');
+                            speechBubble.appendChild(bubbleBg);
+                            
+                            const bubbleBorder = document.createElement('a-plane');
+                            bubbleBorder.setAttribute('width', '1.02');
+                            bubbleBorder.setAttribute('height', '0.37');
+                            bubbleBorder.setAttribute('color', '#000000');
+                            bubbleBorder.setAttribute('opacity', '0.8');
+                            bubbleBorder.setAttribute('shader', 'flat');
+                            bubbleBorder.setAttribute('position', '0 0 -0.01');
+                            bubbleBorder.setAttribute('side', 'double');
+                            speechBubble.appendChild(bubbleBorder);
+                            
+                            const bubbleText = document.createElement('a-text');
+                            bubbleText.setAttribute('value', '☕ COFFEE PLEASE!');
+                            bubbleText.setAttribute('align', 'center');
+                            bubbleText.setAttribute('position', '0 0 0.02');
+                            bubbleText.setAttribute('width', '1.8');
+                            bubbleText.setAttribute('color', '#2d1810');
+                            speechBubble.appendChild(bubbleText);
+                            
+                            speechBubble.setAttribute('animation', 'property: position; to: 0 2.0 0; dur: 1200; dir: alternate; loop: true; easing: easeInOutSine');
+                            
+                            customer.appendChild(speechBubble);
+                        }, 800); // Après l'animation de déplacement
+                    }
+                }
+            });
+            
+            updateARDebug(`Queue advanced! ${customers.length} waiting`);
+        }
+
         // --- AR NOTIFICATION SYSTEM ---
         function showARNotification(message, duration = 2000) {
             const cam = document.getElementById('cam');
             if (!cam) return;
 
-            // Create notification text in AR
+            // Conteneur pour notification avec fond
+            const notifContainer = document.createElement('a-entity');
+            notifContainer.setAttribute('position', '0 0.3 -1');
+            
+            // Fond noir
+            const bg = document.createElement('a-plane');
+            bg.setAttribute('width', '1.2');
+            bg.setAttribute('height', '0.25');
+            bg.setAttribute('color', '#000000');
+            bg.setAttribute('opacity', '0.8');
+            notifContainer.appendChild(bg);
+
+            // Texte de notification
             const notification = document.createElement('a-text');
             notification.setAttribute('value', message);
             notification.setAttribute('align', 'center');
-            notification.setAttribute('position', '0 0.3 -1'); // Devant les yeux
-            notification.setAttribute('width', '3');
+            notification.setAttribute('position', '0 0 0.01');
+            notification.setAttribute('width', '2.5');
             notification.setAttribute('color', '#00ff00');
             notification.setAttribute('opacity', '1');
-            notification.setAttribute('background', '#000000');
-            notification.setAttribute('padding', '0.1');
+            notifContainer.appendChild(notification);
 
-            cam.appendChild(notification);
+            cam.appendChild(notifContainer);
 
             // Animation: fade out puis remove
             setTimeout(() => {
@@ -1208,10 +1467,11 @@ window.addEventListener('load', () => {
                     opacity -= 0.05;
                     if (opacity <= 0) {
                         clearInterval(fadeInterval);
-                        if (notification.parentNode) {
-                            notification.parentNode.removeChild(notification);
+                        if (notifContainer.parentNode) {
+                            notifContainer.parentNode.removeChild(notifContainer);
                         }
                     } else {
+                        bg.setAttribute('opacity', (opacity * 0.8).toString());
                         notification.setAttribute('opacity', opacity.toString());
                     }
                 }, 50);
@@ -1220,20 +1480,25 @@ window.addEventListener('load', () => {
 
         // --- SIMPLE CUSTOMER SYSTEM ---
         const customers = [];
+        const MAX_QUEUE_SIZE = 4; // Maximum 4 clients dans la queue
+        const QUEUE_SPACING = 1.2; // Espacement entre chaque client (en mètres)
+        const QUEUE_START_DISTANCE = 2.0; // Distance du premier client
 
         function spawnCustomer() {
-            // RÉINITIALISER LE FLAG DE LIVRAISON (IMPORTANT !)
-            coffeeDelivered = false;
+            // RÉINITIALISER LE FLAG DE LIVRAISON si c'était le dernier client
+            if (customers.length === 0) {
+                coffeeDelivered = false;
+            }
             
-            // Limite à 1 client pour le test
-            if (customers.length > 0) {
-                console.log('Client déjà présent');
+            // Limite de la queue
+            if (customers.length >= MAX_QUEUE_SIZE) {
+                console.log('⚠️ Queue pleine!');
+                updateARDebug('Queue full!');
                 return;
             }
 
-            console.log('🧍 Spawning customer...');
-            console.log('🚩 coffeeDelivered reset to FALSE');
-            debugEl.textContent = '🧍 NEW CUSTOMER';
+            console.log(`🧍 Spawning customer ${customers.length + 1}...`);
+            updateARDebug(`🧍 Customer ${customers.length + 1} spawned!`);
 
             // Récupérer la position de la caméra
             const cam = document.getElementById('cam');
@@ -1243,83 +1508,94 @@ window.addEventListener('load', () => {
             }
 
             const camPos = new THREE.Vector3();
-            const camDir = new THREE.Vector3();
             cam.object3D.getWorldPosition(camPos);
-            cam.object3D.getWorldDirection(camDir);
 
-            // Position du client à 1.5m devant, au niveau du sol
-            const customerPos = camPos.clone().add(camDir.multiplyScalar(-1.5));
-            customerPos.y = 0; // Au niveau du sol
+            // ✅ POSITION DANS LA QUEUE : Le nouveau client va à la fin
+            const positionInQueue = customers.length; // 0 = premier, 1 = deuxième, etc.
+            const distanceFromCamera = QUEUE_START_DISTANCE + (positionInQueue * QUEUE_SPACING);
+            
+            const camRotY = cam.object3D.rotation.y;
+            const offsetX = Math.sin(camRotY) * -distanceFromCamera;
+            const offsetZ = Math.cos(camRotY) * -distanceFromCamera;
+            
+            const customerPos = new THREE.Vector3(
+                camPos.x + offsetX,
+                0,
+                camPos.z + offsetZ
+            );
 
             // Modèle 3D du client (Punk)
             const customer = document.createElement('a-entity');
             customer.setAttribute('gltf-model', 'url(models/Punk.glb)');
             customer.setAttribute('position', `${customerPos.x} ${customerPos.y} ${customerPos.z}`);
-            customer.setAttribute('scale', '1 1 1');
-            customer.setAttribute('rotation', '0 0 0');
+            customer.setAttribute('scale', '0.85 0.85 0.85');
+            
+            // ✅ ORIENTER LE CLIENT FACE À LA CAMÉRA
+            const angleToCamera = Math.atan2(
+                camPos.x - customerPos.x,
+                camPos.z - customerPos.z
+            ) * (180 / Math.PI);
+            customer.setAttribute('rotation', `0 ${angleToCamera} 0`);
+            
             customer.classList.add('customer');
             customer.id = `customer-${Date.now()}`;
             customer.dataset.needsCoffee = 'true';
+            customer.dataset.queuePosition = positionInQueue.toString(); // Position dans la queue
 
-            // CORPS PHYSIQUE POUR LA COLLISION (CANNON.js)
-            // Entité enfant invisible avec static-body pour la détection
-            // Positionnée à hauteur de poitrine (y=1.0 relatif) pour mieux détecter les objets tenus
-            const collisionBody = document.createElement('a-entity');
-            collisionBody.setAttribute('position', '0 1.0 0');
-            collisionBody.setAttribute('static-body', 'shape: sphere; sphereRadius: 0.4');
-            customer.appendChild(collisionBody);
-
-            // ZONE DE DÉTECTION VISIBLE (Cercle vert au sol - visuel seulement)
-            const deliveryZone = document.createElement('a-ring');
-            deliveryZone.setAttribute('radius-inner', '0.3');
-            deliveryZone.setAttribute('radius-outer', '0.4');
-            deliveryZone.setAttribute('color', '#00ff00');
-            deliveryZone.setAttribute('opacity', '0.7');
-            deliveryZone.setAttribute('rotation', '-90 0 0');
-            deliveryZone.setAttribute('position', '0 0.01 0');
-            deliveryZone.setAttribute('material', 'shader: flat; transparent: true');
-            deliveryZone.classList.add('delivery-zone');
-            customer.appendChild(deliveryZone);
-
-            // ÉCOUTEUR DE COLLISION PHYSIQUE (sur l'entité collisionBody)
-            collisionBody.addEventListener('collide', (evt) => {
-                if (coffeeDelivered) return; // Déjà livré
-
-                const otherEl = evt.detail.body.el;
-                if (!otherEl) return;
-
-                // Vérifier si c'est une tasse de café
-                const isCoffee = 
-                    otherEl.classList.contains('coffee-cup') || 
-                    otherEl.dataset.isCoffee === 'true' || 
-                    otherEl.dataset.coffeeItem === 'true' ||
-                    otherEl.getAttribute('data-coffee') === 'true';
-
-                if (isCoffee) {
-                    console.log('💥 COLLISION DÉTECTÉE! Café touche le client!');
-                    const ring = customer.querySelector('.delivery-zone');
-                    if (ring) ring.setAttribute('color', 'gold');
-                    handleCoffeeDelivery(otherEl, customer);
-                }
-            });
-
-            // Panneau de commande (Texte)
-            const text = document.createElement('a-text');
-            text.setAttribute('value', 'COFFEE PLEASE!\nBring me a cup!');
-            text.setAttribute('align', 'center');
-            text.setAttribute('position', '0 2.1 0.3');
-            text.setAttribute('scale', '1.2 1.2 1.2');
-            text.setAttribute('color', '#FFD700');
-            text.setAttribute('font', 'mozillavr');
-            customer.appendChild(text);
-
+            // ✅ BULLE DE DIALOGUE (Seulement pour le PREMIER client)
+            if (positionInQueue === 0) {
+                const speechBubble = document.createElement('a-entity');
+                speechBubble.setAttribute('position', '0 1.8 0');
+                speechBubble.classList.add('speech-bubble');
+                
+                const bubbleBg = document.createElement('a-plane');
+                bubbleBg.setAttribute('width', '1.0');
+                bubbleBg.setAttribute('height', '0.35');
+                bubbleBg.setAttribute('color', '#ffffff');
+                bubbleBg.setAttribute('opacity', '0.95');
+                bubbleBg.setAttribute('shader', 'flat');
+                bubbleBg.setAttribute('side', 'double');
+                bubbleBg.setAttribute('material', 'transparent: true');
+                speechBubble.appendChild(bubbleBg);
+                
+                const bubbleBorder = document.createElement('a-plane');
+                bubbleBorder.setAttribute('width', '1.02');
+                bubbleBorder.setAttribute('height', '0.37');
+                bubbleBorder.setAttribute('color', '#000000');
+                bubbleBorder.setAttribute('opacity', '0.8');
+                bubbleBorder.setAttribute('shader', 'flat');
+                bubbleBorder.setAttribute('position', '0 0 -0.01');
+                bubbleBorder.setAttribute('side', 'double');
+                speechBubble.appendChild(bubbleBorder);
+                
+                const bubbleText = document.createElement('a-text');
+                bubbleText.setAttribute('value', '☕ COFFEE PLEASE!\nBring me a cup!');
+                bubbleText.setAttribute('align', 'center');
+                bubbleText.setAttribute('position', '0 0 0.02');
+                bubbleText.setAttribute('width', '1.8');
+                bubbleText.setAttribute('color', '#2d1810');
+                bubbleText.setAttribute('wrap-count', '20');
+                bubbleText.setAttribute('baseline', 'center');
+                speechBubble.appendChild(bubbleText);
+                
+                speechBubble.setAttribute('animation', 'property: position; to: 0 2.0 0; dur: 1200; dir: alternate; loop: true; easing: easeInOutSine');
+                
+                customer.appendChild(speechBubble);
+            }
             sceneEl.appendChild(customer);
             customers.push(customer);
 
-            console.log('✅ Customer spawned at:', customerPos);
-            console.log('👥 Total customers:', customers.length);
-
-            showARNotification('☕ New Customer!', 2000);
+            console.log(`✅ Customer spawned at position ${positionInQueue} (${customers.length} total)`);
+            updateARDebug(`Queue: ${customers.length}/${MAX_QUEUE_SIZE}`);
+            
+            showARNotification(`🧍 Customer ${customers.length} joined!`, 2000);
+            
+            // Spawner automatiquement un autre client après 3 secondes (jusqu'à max)
+            if (customers.length < MAX_QUEUE_SIZE) {
+                setTimeout(() => {
+                    spawnCustomer();
+                }, 3000);
+            }
         }
 
         function removeCustomer(customer) {
