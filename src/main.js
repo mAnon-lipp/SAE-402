@@ -4,6 +4,7 @@ import 'aframe-physics-system';
 
 // Import des composants AR personnalisés
 import './components/ar-plane-detection.js';
+import './components/coffee-temperature.js';
 // import './components/ar-meshing.js'; // Désactivé pour éviter conflit avec plane-detection
 
 /* global THREE */
@@ -83,6 +84,7 @@ window.addEventListener('load', () => {
         let menuToggleLock = false; // Prevents flickering when holding button
         let coffeeMachineLock = false; // Prevents multiple coffee spawns
         let coffeeAudio = null; // Audio element for coffee sound
+        let negativeAudio = null; // Audio element for negative feedback (cold coffee)
 
         // --- 🔍 SYSTÈME DE DEBUG AR ULTRA-VISIBLE ---
         let arDebugPanel = null;
@@ -128,8 +130,20 @@ window.addEventListener('load', () => {
         function initCoffeeAudio() {
             coffeeAudio = new Audio('/sounds/public_assets_café.MP3');
             coffeeAudio.volume = 0.7;
+            
+            // Initialize negative feedback audio
+            negativeAudio = new Audio('/sounds/Hmph-sound-effect.mp3');
+            negativeAudio.volume = 0.8;
         }
         initCoffeeAudio();
+        
+        // --- PLAY NEGATIVE FEEDBACK ---
+        function playNegativeFeedback() {
+            if (negativeAudio) {
+                negativeAudio.currentTime = 0;
+                negativeAudio.play().catch(e => console.log('Negative audio error:', e));
+            }
+        }
 
         // --- SPAWN COFFEE CUP FUNCTION ---
         function spawnCoffeeCup(machineEntity) {
@@ -152,6 +166,9 @@ window.addEventListener('load', () => {
             cup.setAttribute('dynamic-body', 'mass:0.3;linearDamping:0.5;angularDamping:0.5');
             cup.setAttribute('class', 'clickable grabbable coffee-cup');
             cup.id = `coffee-cup-${Date.now()}`;
+            
+            // ⚡ ADD TEMPERATURE MANAGEMENT COMPONENT
+            cup.setAttribute('coffee-temperature', 'temperature: 100; coolingRate: 5; gaugeHeight: 0.3');
 
             // MARQUAGE MULTIPLE pour garantir la détection
             cup.dataset.isCoffee = 'true';
@@ -1285,21 +1302,36 @@ window.addEventListener('load', () => {
                     firstCustomer.object3D.getWorldPosition(customerPos);
 
                     const distance = cupPos.distanceTo(customerPos);
-                    
-                    // 🔍 AFFICHER LA DISTANCE EN TEMPS RÉEL
-                    if (shouldDebug) {
-                        updateARDebug(`Queue: ${customers.length} | DIST: ${distance.toFixed(2)}m`);
-                    }
 
                     // SEUIL AJUSTÉ POUR LIVRAISON INTENTIONNELLE
                     const threshold = 0.5; // 50cm - Contact direct
 
                     if (distance < threshold) {
                         console.log('🎯 COLLISION with FIRST customer! Distance:', distance);
+                        
+                        // ⚡ CHECK COFFEE TEMPERATURE BEFORE ACCEPTING
+                        const tempComponent = cup.components['coffee-temperature'];
+                        if (tempComponent && tempComponent.isTooCold()) {
+                            // ❄️ COFFEE TOO COLD - REFUSE ORDER
+                            console.log('❄️ Coffee is too cold! Temperature:', tempComponent.getTemperature().toFixed(1) + '%');
+                            
+                            // Play negative audio feedback
+                            playNegativeFeedback();
+                            
+                            // Show AR notification explaining the refusal
+                            showARNotification(`❄️ Coffee too cold! Customer refused!\nMake a fresh one!`, 3000);
+                            updateARDebug(`❄️ TOO COLD: ${tempComponent.getTemperature().toFixed(1)}%`);
+                            
+                            // Customer stays, player must dispose and brew fresh coffee
+                            return; // Exit without accepting delivery
+                        }
+                        
+                        // ✅ COFFEE IS HOT ENOUGH - ACCEPT DELIVERY
                         coffeeDelivered = true;
+                        const temp = tempComponent ? tempComponent.getTemperature().toFixed(0) : '100';
                         
                         updateARDebug(`🎯 DELIVERED!`);
-                        showARNotification(`✅ Served customer 1!`, 2000);
+                        showARNotification(`✅ Served customer 1! Temp: ${temp}%`, 2000);
                         
                         // Marquer pour suppression
                         cup.dataset.deleting = 'true';
@@ -1367,17 +1399,15 @@ window.addEventListener('load', () => {
             cam.object3D.getWorldPosition(camPos);
             const camRotY = cam.object3D.rotation.y;
             
-            // Faire avancer chaque client d'une position
+// Faire avancer chaque client d'une position (ligne verticale)
             customers.forEach((customer, index) => {
                 // Nouvelle position (une place plus proche)
                 const newDistance = QUEUE_START_DISTANCE + (index * QUEUE_SPACING);
-                const offsetX = Math.sin(camRotY) * -newDistance;
-                const offsetZ = Math.cos(camRotY) * -newDistance;
                 
                 const newPos = {
-                    x: camPos.x + offsetX,
+                    x: camPos.x, // Alignement vertical sur X
                     y: 0,
-                    z: camPos.z + offsetZ
+                    z: camPos.z - newDistance // Distance sur Z
                 };
                 
                 // Animation de déplacement fluide
@@ -1481,8 +1511,8 @@ window.addEventListener('load', () => {
         // --- SIMPLE CUSTOMER SYSTEM ---
         const customers = [];
         const MAX_QUEUE_SIZE = 4; // Maximum 4 clients dans la queue
-        const QUEUE_SPACING = 1.2; // Espacement entre chaque client (en mètres)
-        const QUEUE_START_DISTANCE = 2.0; // Distance du premier client
+        const QUEUE_SPACING = 0.8; // Espacement entre chaque client (en mètres)
+        const QUEUE_START_DISTANCE = 1.2; // Distance du premier client
 
         function spawnCustomer() {
             // RÉINITIALISER LE FLAG DE LIVRAISON si c'était le dernier client
@@ -1510,18 +1540,15 @@ window.addEventListener('load', () => {
             const camPos = new THREE.Vector3();
             cam.object3D.getWorldPosition(camPos);
 
-            // ✅ POSITION DANS LA QUEUE : Le nouveau client va à la fin
+            // ✅ POSITION DANS LA QUEUE : Le nouveau client va à la fin (ligne verticale)
             const positionInQueue = customers.length; // 0 = premier, 1 = deuxième, etc.
             const distanceFromCamera = QUEUE_START_DISTANCE + (positionInQueue * QUEUE_SPACING);
             
-            const camRotY = cam.object3D.rotation.y;
-            const offsetX = Math.sin(camRotY) * -distanceFromCamera;
-            const offsetZ = Math.cos(camRotY) * -distanceFromCamera;
-            
+            // Aligner les clients sur une ligne verticale devant la caméra
             const customerPos = new THREE.Vector3(
-                camPos.x + offsetX,
+                camPos.x, // Même X que la caméra = ligne droite
                 0,
-                camPos.z + offsetZ
+                camPos.z - distanceFromCamera // Devant la caméra (recule sur Z)
             );
 
             // Modèle 3D du client (Punk)
