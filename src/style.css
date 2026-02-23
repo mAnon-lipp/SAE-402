@@ -95,7 +95,9 @@ body {
 
 /* LANDING PAGE CONTAINER */
 .landing-container {
-    position: relative;
+    position: fixed; /* Changed from relative to fixed for better layering */
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100vh;
     /* Dégradé sans image de fond */
@@ -106,6 +108,7 @@ body {
     flex-direction: column;
     justify-content: space-between;
     transition: opacity 0.8s ease-out;
+    z-index: 1000; /* Ensure it's on top of A-Frame scene */
 }
 
 /* TYPOGRAPHIE & LOGO */

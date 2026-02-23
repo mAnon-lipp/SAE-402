@@ -60,8 +60,7 @@ AFRAME.registerComponent('coffee-temperature', {
         this.tempIcon.setAttribute('color', '#ffffff');
         this.gaugeContainer.appendChild(this.tempIcon);
         
-        // Make gauge always face the camera (billboard effect)
-        this.gaugeContainer.setAttribute('look-at', '#cam');
+        // Billboard effect will be handled in tick() for better compatibility
         
         // Attach to the coffee cup entity
         this.el.appendChild(this.gaugeContainer);
@@ -84,6 +83,18 @@ AFRAME.registerComponent('coffee-temperature', {
         
         // Update the visual gauge
         this.updateGaugeVisual();
+        
+        // Billboard effect: make gauge face camera
+        const camera = document.querySelector('[camera]');
+        if (camera && this.gaugeContainer && this.gaugeContainer.object3D) {
+            const cameraPos = new THREE.Vector3();
+            const gaugePos = new THREE.Vector3();
+            
+            camera.object3D.getWorldPosition(cameraPos);
+            this.gaugeContainer.object3D.getWorldPosition(gaugePos);
+            
+            this.gaugeContainer.object3D.lookAt(cameraPos);
+        }
     },
 
     /**
@@ -152,8 +163,31 @@ AFRAME.registerComponent('coffee-temperature', {
      * Clean up when component is removed
      */
     remove: function () {
-        if (this.gaugeContainer && this.gaugeContainer.parentNode) {
-            this.gaugeContainer.parentNode.removeChild(this.gaugeContainer);
+        // Properly cleanup gauge elements
+        if (this.gaugeContainer) {
+            // Remove all child elements first
+            if (this.gaugeBackground && this.gaugeBackground.parentNode) {
+                this.gaugeBackground.parentNode.removeChild(this.gaugeBackground);
+            }
+            if (this.gaugeFill && this.gaugeFill.parentNode) {
+                this.gaugeFill.parentNode.removeChild(this.gaugeFill);
+            }
+            if (this.tempIcon && this.tempIcon.parentNode) {
+                this.tempIcon.parentNode.removeChild(this.tempIcon);
+            }
+            
+            // Remove container
+            if (this.gaugeContainer.parentNode) {
+                this.gaugeContainer.parentNode.removeChild(this.gaugeContainer);
+            }
         }
+        
+        // Clear references
+        this.gaugeContainer = null;
+        this.gaugeBackground = null;
+        this.gaugeFill = null;
+        this.tempIcon = null;
+        
+        console.log('🌡️ Coffee temperature component cleaned up');
     }
 });

@@ -1,5 +1,10 @@
 /* global AFRAME, THREE */
 
+/**
+ * Component: ar-plane-detection
+ * Description: Detects real-world planes and creates physics surfaces
+ * NOTE: This component is the ONLY source of floor surfaces to avoid duplicates
+ */
 AFRAME.registerComponent('ar-plane-detection', {
     schema: {
         visualize: { type: 'boolean', default: true }
@@ -12,8 +17,11 @@ AFRAME.registerComponent('ar-plane-detection', {
         this.debugEl = document.getElementById('debug');
         this.surfacesEl = document.getElementById('surfaces');
 
+        // Emit event when plane detection is ready
         this.el.sceneEl.addEventListener('enter-vr', () => {
-            this.updateText('Session AR démarrée. Scannez votre environnement...');
+            this.updateText('AR Session started. Scanning environment...');
+            // Notify main.js to NOT create manual surfaces
+            this.el.sceneEl.emit('plane-detection-active');
         });
     },
 

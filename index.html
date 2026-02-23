@@ -60,6 +60,11 @@
   </div>
 
   <a-scene id="scene" 
+    style="display: none;"
+    game-manager
+    customer-manager="maxQueue: 4; spawnInterval: 3000"
+    cleaning-system="checkInterval: 200; initialStains: 5"
+    force-transparent
     physics="debug:false;gravity:-9.8" 
     vr-mode-ui="enabled:false" 
     renderer="alpha:true;antialias:true"
@@ -72,12 +77,21 @@
     <a-entity id="rig">
       <a-camera id="cam" position="0 1.6 0"></a-camera>
 
-      <!-- CONTROLLERS A-FRAME (Supprimés pour éviter conflits, gérés manuellement dans main.js) -->
+      <!-- XR Controllers with unified grab system -->
+      <a-entity id="left-hand" 
+                hand-controls="hand: left"
+                xr-grab="hand: left; grabDistance: 0.15"></a-entity>
+      
+      <a-entity id="right-hand" 
+                hand-controls="hand: right"
+                xr-grab="hand: right; grabDistance: 0.15"></a-entity>
     </a-entity>
 
     <!-- CUBE -->
     <a-box id="cube" position="0 0.5 -0.7" width="0.15" height="0.15" depth="0.15" color="#8A2BE2"
-      dynamic-body="mass:0.5;linearDamping:0.3;angularDamping:0.3"></a-box>
+      dynamic-body="mass:0.5;linearDamping:0.3;angularDamping:0.3"
+      grabbable
+      class="clickable grabbable"></a-box>
 
     <!-- Curseur hit-test -->
     <a-ring id="cursor" position="0 0 -1" rotation="-90 0 0" radius-inner="0.05" radius-outer="0.08" color="#00FF00"
