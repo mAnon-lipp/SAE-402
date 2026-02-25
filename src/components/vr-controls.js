@@ -1,19 +1,18 @@
 import 'aframe';
 
 AFRAME.registerComponent('vr-controls', {
-  init: function () {
-    // Boutons de la manette gauche (X / Y) ou droite (A / B) pour ouvrir le menu
-    this.el.addEventListener('xbuttondown', this.toggleMenu.bind(this));
-    this.el.addEventListener('ybuttondown', this.toggleMenu.bind(this));
-    this.el.addEventListener('bbuttondown', this.toggleMenu.bind(this));
-  },
+  schema: { hand: { type: 'string', default: 'left' } },
 
-  toggleMenu: function () {
-    const menu = document.querySelector('[hud-menu]');
-    if (menu) {
-      const isVisible = menu.getAttribute('visible');
-      menu.setAttribute('visible', !isVisible);
-      console.log('Affichage du menu VR:', !isVisible);
-    }
+  init: function () {
+    // Attendre que la manette soit vraiment connectée
+    this.el.addEventListener('controllerconnected', () => {
+      console.log(`🎮 Manette ${this.data.hand} prête !`);
+
+      // DÉSACTIVÉ : La gestion des boutons est maintenant dans main.js xrLoop
+      // pour éviter les conflits et avoir un système centralisé
+      
+      // Note : Les boutons X/Y (main gauche) et B (machine à café) 
+      // sont gérés dans main.js via inputSources.gamepad.buttons
+    });
   }
 });

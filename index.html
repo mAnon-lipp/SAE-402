@@ -42,11 +42,18 @@
 
     <a-entity id="rig">
       <a-camera id="cam" position="0 1.6 0"></a-camera>
-      <a-entity id="leftHand"></a-entity>
-      <a-entity id="rightHand"></a-entity>
+       <a-entity id="leftHand"
+         vr-controls="hand: left"
+         grab-system="handedness: left">
+       </a-entity>
+
+       <a-entity id="rightHand"
+         vr-controls="hand: right"
+         grab-system="handedness: right">
+       </a-entity>
     </a-entity>
 
-    <a-entity id="logic-spawner"></a-entity>
+    <a-entity id="logic-spawner" customer-spawner></a-entity>
   </a-scene>
 
   <script type="module" src="src/main.js"></script>

@@ -10,12 +10,14 @@ AFRAME.registerComponent('coffee-machine', {
     this.isBrewing = false;
     
     // Initialisation du son
-    this.audio = new Audio('/sounds/public_assets_café.MP3');
+    this.audio = new Audio('sounds/public_assets_café.MP3');
     this.audio.volume = 0.7;
 
     // Binding pour garder le contexte 'this'
     this.onClick = this.onClick.bind(this);
     this.el.addEventListener('click', this.onClick);
+    
+    console.log('☕ Machine à café initialisée. Appuyez sur B à proximité pour préparer un café.');
   },
 
   onClick: function () {

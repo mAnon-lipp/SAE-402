@@ -5,7 +5,7 @@ AFRAME.registerComponent('customer', {
   init: function () {
     this.isServed = false;
     this.refusalCooldown = false;
-    this.audioRefusal = new Audio('/sounds/Hmph-sound-effect.mp3');
+    this.audioRefusal = new Audio('sounds/Hmph-sound-effect.mp3');
     this.audioRefusal.volume = 0.8;
 
     // Écouter quand le client devient le premier de la file
