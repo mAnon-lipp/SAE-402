@@ -55,9 +55,11 @@ AFRAME.registerSystem('game-manager', {
     
     console.log(`☕ Café livré avec succès ! Score: ${this.state.score}`);
 
-    // ⚡ FIX FREEZE CRITIQUE : Toutes les suppressions doivent être différées
+    // ⚡ FIX FREEZE CRITIQUE : Toutes les suppressions doivent être LARGEMENT différées
     // pour éviter de supprimer un objet pendant la phase de calcul physique Cannon.js
     setTimeout(() => {
+      console.log('🧹 Début nettoyage tasse et client...');
+      
       // 1. Nettoyage propre de la tasse (Physique Cannon.js + DOM)
       if (cup && cup.parentNode) {
         try {
@@ -68,8 +70,10 @@ AFRAME.registerSystem('game-manager', {
           
           const cupIdx = this.state.spawnedObjects.indexOf(cup);
           if (cupIdx > -1) this.state.spawnedObjects.splice(cupIdx, 1);
+          
+          console.log('✅ Tasse supprimée');
         } catch(e) { 
-          console.warn("Erreur suppression tasse:", e); 
+          console.warn("❌ Erreur suppression tasse:", e); 
         }
       }
 
@@ -86,11 +90,15 @@ AFRAME.registerSystem('game-manager', {
           
           const custIdx = this.state.customers.indexOf(customer);
           if (custIdx > -1) this.state.customers.splice(custIdx, 1);
+          
+          console.log('✅ Client supprimé');
         } catch(e) {
-          console.warn("Erreur suppression client:", e);
+          console.warn("❌ Erreur suppression client:", e);
         }
       }
-    }, 0);
+      
+      console.log('✅ Nettoyage terminé !');
+    }, 600);  // ⚡ Augmenté à 600ms pour laisser le temps à toutes les opérations physiques
 
     // 3. Faire avancer la file d'attente après un court délai
     setTimeout(() => {

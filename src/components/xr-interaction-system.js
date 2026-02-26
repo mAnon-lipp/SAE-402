@@ -184,14 +184,16 @@ AFRAME.registerComponent('xr-interaction-system', {
 
     console.log(`🖐️ Objet relâché: ${grabbedObject.getAttribute('gltf-model') || 'box'}`);
 
+    // ⚡ MARQUER L'OBJET COMME EN COURS DE RELEASE (pour éviter détection collision immédiate)
+    grabbedObject.dataset.isBeingReleased = 'true';
+
     try {
       // ⚡ ÉTAPE 1 : Détacher de la manette et remettre dans la scène
       // Utilise .attach() pour préserver la position/rotation mondiale exacte
       this.el.sceneEl.object3D.attach(grabbedObject.object3D);
       console.log('✅ Objet détaché du contrôleur et réattaché à la scène');
 
-      // ⚡ ÉTAPE 2 : Attendre 1 frame avant de réactiver la physique
-      // Cela évite les conflits Cannon.js pendant la phase de calcul
+      // ⚡ ÉTAPE 2 : Attendre suffisamment avant de réactiver la physique
       setTimeout(() => {
         if (!grabbedObject || !grabbedObject.body) {
           console.warn('⚠️ Objet ou body introuvable lors de la réactivation physique');
@@ -214,10 +216,17 @@ AFRAME.registerComponent('xr-interaction-system', {
           grabbedObject.body.wakeUp();
           
           console.log('✅ Physique réactivée avec succès');
+          
+          // ⚡ DÉBLOQUER LA DÉTECTION COLLISION APRÈS UN DÉLAI SÉCURISÉ
+          setTimeout(() => {
+            delete grabbedObject.dataset.isBeingReleased;
+            console.log('✅ Objet prêt pour détection collision');
+          }, 300);  // Attendre 300ms après réactivation physique
+          
         } catch (physicsError) {
           console.error('❌ Erreur réactivation physique:', physicsError);
         }
-      }, 0);
+      }, 200);  // ⚡ Augmenté à 200ms
       
     } catch (e) {
       console.error('❌ Erreur lors du release:', e);

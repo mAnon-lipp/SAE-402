@@ -40,7 +40,7 @@ AFRAME.registerComponent('customer-spawner', {
     
     const customerPos = new THREE.Vector3(
       camPos.x, 
-      0,
+      0,  // Hauteur au sol
       camPos.z - distanceFromCamera
     );
 

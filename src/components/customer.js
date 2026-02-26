@@ -63,14 +63,25 @@ AFRAME.registerComponent('customer', {
     // Parcourir uniquement les tasses de café
     const coffees = system.state.spawnedObjects.filter(obj => obj && obj.classList.contains('coffee-cup'));
 
+    // 🔍 DEBUG : Afficher les tasses détectées
+    if (coffees.length > 0 && !this._debugShown) {
+      console.log(`🔍 Client détecte ${coffees.length} tasse(s) de café`);
+      this._debugShown = true;
+      setTimeout(() => { this._debugShown = false; }, 2000); // Log toutes les 2 secondes max
+    }
+
     for (let cup of coffees) {
       if (cup.dataset.deleting === 'true') continue;
+      if (cup.dataset.isBeingReleased === 'true') continue; // ⚡ Ignorer les tasses en cours de relâchement
 
       const cupPos = new THREE.Vector3();
       cup.object3D.getWorldPosition(cupPos);
 
       // Distance de livraison (50cm)
-      if (myPos.distanceTo(cupPos) < 0.5) {
+      const distance = myPos.distanceTo(cupPos);
+      
+      if (distance < 0.5) {
+        console.log(`📏 Distance tasse-client: ${distance.toFixed(2)}m - VALIDE !`);
         
         // ⚡ VÉRIFICATION DE LA TEMPÉRATURE
         const tempComp = cup.components['coffee-temperature'];
@@ -98,8 +109,9 @@ AFRAME.registerComponent('customer', {
         // ⚡ FIX FREEZE : setTimeout pour éviter la suppression pendant la phase physique
         setTimeout(() => {
           // Notifier le Game Manager qui gérera le nettoyage, le score et l'avancement
+          console.log('📤 Envoi événement coffee-delivered au Game Manager');
           system.el.emit('coffee-delivered', { cup: cup, customer: this.el });
-        }, 0);
+        }, 400);  // ⚡ Augmenté à 400ms pour coordonner avec le système de release
         
         break; // Stop la boucle
       }

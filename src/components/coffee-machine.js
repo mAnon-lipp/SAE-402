@@ -55,9 +55,13 @@ AFRAME.registerComponent('coffee-machine', {
     // Physique exacte de ton ancien code
     cup.setAttribute('dynamic-body', 'mass:0.3;linearDamping:0.5;angularDamping:0.5');
     
-    // Classes et attributs nécessaires pour le raycaster et la préhension
-    cup.setAttribute('class', 'clickable grabbable coffee-cup');
+    // ⚡ FIX : Utiliser classList.add au lieu de setAttribute pour les classes
+    cup.classList.add('clickable');
+    cup.classList.add('grabbable');
+    cup.classList.add('coffee-cup');
     cup.id = `coffee-cup-${Date.now()}`;
+    
+    console.log('☕ Tasse créée avec classes:', cup.classList.toString());
     
     // ⚡ RÉINTÉGRATION DU COMPOSANT DE TEMPÉRATURE ⚡
     cup.setAttribute('coffee-temperature', 'temperature: 100; coolingRate: 5; gaugeHeight: 0.3');
