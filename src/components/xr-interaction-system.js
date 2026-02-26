@@ -221,7 +221,7 @@ AFRAME.registerComponent('xr-interaction-system', {
           setTimeout(() => {
             delete grabbedObject.dataset.isBeingReleased;
             console.log('✅ Objet prêt pour détection collision');
-          }, 300);  // Attendre 300ms après réactivation physique
+          }, 150);  // ⚡ Réduit à 150ms pour améliorer la réactivité
           
         } catch (physicsError) {
           console.error('❌ Erreur réactivation physique:', physicsError);

@@ -13,6 +13,7 @@ AFRAME.registerSystem('game-manager', {
       spawnedObjects: [],
       score: 0,
       coffeeDelivered: false,
+      isDelivering: false, // ⚡ FLAG pour éviter les doubles livraisons
     };
 
     // Constantes de la file d'attente
@@ -45,8 +46,9 @@ AFRAME.registerSystem('game-manager', {
   onCoffeeDelivered: function (event) {
     const { cup, customer } = event.detail;
     
-    // Sécurité pour éviter les doubles validations
-    if (this.state.coffeeDelivered) return;
+    // ⚡ Sécurité pour éviter les doubles validations
+    if (this.state.coffeeDelivered || this.state.isDelivering) return;
+    this.state.isDelivering = true;
     this.state.coffeeDelivered = true;
     
     // Augmenter le score
@@ -108,6 +110,7 @@ AFRAME.registerSystem('game-manager', {
     // 4. Relancer le cycle : préparer la venue du prochain client
     setTimeout(() => {
       this.state.coffeeDelivered = false;
+      this.state.isDelivering = false; // ⚡ Déverrouiller
       // On demande au composant spawner (qui sera créé à l'étape 4) de faire venir un client
       this.el.emit('request-spawn-customer'); 
     }, 3000);

@@ -60,12 +60,12 @@ AFRAME.registerComponent('customer', {
     const myPos = new THREE.Vector3();
     this.el.object3D.getWorldPosition(myPos);
 
-    // Parcourir uniquement les tasses de café
-    const coffees = system.state.spawnedObjects.filter(obj => obj && obj.classList.contains('coffee-cup'));
+    // ⚡ DÉTECTION DIRECTE DOM (plus robuste que system.state)
+    const coffees = Array.from(document.querySelectorAll('.coffee-cup'));
 
     // 🔍 DEBUG : Afficher les tasses détectées
     if (coffees.length > 0 && !this._debugShown) {
-      console.log(`🔍 Client détecte ${coffees.length} tasse(s) de café`);
+      console.log(`🔍 Client détecte ${coffees.length} tasse(s) de café via DOM`);
       this._debugShown = true;
       setTimeout(() => { this._debugShown = false; }, 2000); // Log toutes les 2 secondes max
     }
@@ -79,6 +79,11 @@ AFRAME.registerComponent('customer', {
 
       // Distance de livraison (50cm)
       const distance = myPos.distanceTo(cupPos);
+      
+      // 🔍 DEBUG : Log si proche (< 1m)
+      if (distance < 1.0) {
+        console.log(`📏 Distance au client: ${distance.toFixed(2)}m`);
+      }
       
       if (distance < 0.5) {
         console.log(`📏 Distance tasse-client: ${distance.toFixed(2)}m - VALIDE !`);
