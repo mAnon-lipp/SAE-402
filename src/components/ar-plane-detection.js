@@ -31,15 +31,26 @@ AFRAME.registerComponent('ar-plane-detection', {
 
         if (!frame || !session || !refSpace) return;
         
+        // WebXR peut exposer detectedPlanes sur frame OU sur session selon l'implémentation
         const detectedPlanes = frame.detectedPlanes || session.detectedPlanes;
         
         if (!detectedPlanes) {
-            this.updateText('AR activé, mais pas de détection de plans.');
+            // Vérifier si la feature a été accordée
+            if (session.enabledFeatures && !session.enabledFeatures.includes('plane-detection')) {
+                this.updateText('⚠️ Plane-detection non disponible sur cet appareil.');
+            } else {
+                this.updateText('📡 Scannez votre environnement pour détecter les surfaces...');
+            }
             return;
         }
 
+        // Mettre à jour le compteur
+        if (this.surfacesEl) {
+            this.surfacesEl.textContent = `Surfaces: ${detectedPlanes.size}`;
+        }
+
         if (detectedPlanes.size === 0) {
-            if (this.surfacesEl) this.surfacesEl.textContent = "Surfaces: 0";
+            this.updateText('🔍 Aucune surface détectée. Continuez à scanner...');
             return; 
         }
 
@@ -48,6 +59,7 @@ AFRAME.registerComponent('ar-plane-detection', {
             if (!detectedPlanes.has(plane)) {
                 if (entity.parentNode) entity.parentNode.removeChild(entity);
                 this.planes.delete(plane);
+                console.log('🗑️ Plan supprimé');
             }
         }
 
@@ -61,8 +73,9 @@ AFRAME.registerComponent('ar-plane-detection', {
             }
         });
         
-        if (Math.random() < 0.02) {
-            this.updateText(`Détection active !`, this.planes.size);
+        // Message de confirmation périodique
+        if (Math.random() < 0.05) {
+            this.updateText(`✅ ${this.planes.size} surface(s) active(s) !`);
         }
     },
 
@@ -75,17 +88,21 @@ AFRAME.registerComponent('ar-plane-detection', {
         
         entity.setAttribute('material', { 
             color: color, 
-            opacity: 0.3, 
+            opacity: 0.4, // Légèrement plus opaque pour mieux voir
             transparent: true,
-            side: 'double'
+            side: 'double',
+            shader: 'flat' // Meilleur rendu en AR
         });
         
         // Physique : Boite statique pour que les objets tiennent dessus
         entity.setAttribute('static-body', 'shape: box; restitution: 0; friction: 1');
         entity.setAttribute('visible', this.data.visualize);
+        entity.classList.add('ar-plane'); // Pour faciliter le debug
 
         this.el.sceneEl.appendChild(entity);
         this.planes.set(plane, entity);
+        
+        console.log(`🟢 Nouveau plan ${isHorizontal ? 'HORIZONTAL (sol)' : 'VERTICAL (mur)'} détecté!`);
         
         this.updatePlane(plane, entity, frame, refSpace);
     },

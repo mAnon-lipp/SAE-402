@@ -7,6 +7,12 @@
   <title>Holo Barista</title>
 </head>
 <body>
+  <!-- Overlay AR Debug pour Plane Detection -->
+  <div id="ar-overlay" style="position:fixed;top:10px;left:10px;z-index:10000;pointer-events:none;">
+    <div id="debug" style="background:rgba(0,0,0,0.7);color:#0f0;padding:10px;border-radius:5px;font-family:monospace;font-size:14px;">AR Ready</div>
+    <div id="surfaces" style="background:rgba(0,0,0,0.7);color:#0ff;padding:10px;border-radius:5px;font-family:monospace;font-size:14px;margin-top:5px;">Surfaces: 0</div>
+  </div>
+
   <div id="landing-page" class="landing-container">
     <nav class="navbar"><div class="nav-links"></div></nav>
     <main class="content">
@@ -43,13 +49,11 @@
     <a-entity id="rig">
       <a-camera id="cam" position="0 1.6 0"></a-camera>
        <a-entity id="leftHand"
-         vr-controls="hand: left"
-         grab-system="handedness: left">
+         vr-controls="hand: left">
        </a-entity>
 
        <a-entity id="rightHand"
-         vr-controls="hand: right"
-         grab-system="handedness: right">
+         vr-controls="hand: right">
        </a-entity>
     </a-entity>
 

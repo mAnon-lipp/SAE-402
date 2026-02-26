@@ -4,6 +4,7 @@ import * as THREE from 'three';
 AFRAME.registerComponent('customer', {
   init: function () {
     this.isServed = false;
+    this.isProcessed = false; // Flag pour éviter les doubles collisions
     this.refusalCooldown = false;
     this.audioRefusal = new Audio('sounds/Hmph-sound-effect.mp3');
     this.audioRefusal.volume = 0.8;
@@ -51,7 +52,7 @@ AFRAME.registerComponent('customer', {
 
   tick: function () {
     // On ne vérifie la livraison QUE si c'est le premier client de la file
-    if (this.el.dataset.queuePosition !== "0" || this.isServed || this.el.dataset.deleting === 'true') return;
+    if (this.el.dataset.queuePosition !== "0" || this.isServed || this.isProcessed || this.el.dataset.deleting === 'true') return;
 
     const system = this.el.sceneEl.systems['game-manager'];
     if (!system || system.state.coffeeDelivered) return;
@@ -88,13 +89,18 @@ AFRAME.registerComponent('customer', {
         // ✅ CAFÉ CHAUD ET PROCHE : LIVRAISON ACCEPTÉE
         console.log('🎯 COLLISION VALIDÉE avec le client 1 !');
         this.isServed = true;
+        this.isProcessed = true; // Verrouiller immédiatement
         
         // Marquer pour éviter les doubles exécutions
         cup.dataset.deleting = 'true';
         this.el.dataset.deleting = 'true';
 
-        // Notifier le Game Manager qui gérera le nettoyage, le score et l'avancement
-        system.el.emit('coffee-delivered', { cup: cup, customer: this.el });
+        // ⚡ FIX FREEZE : setTimeout pour éviter la suppression pendant la phase physique
+        setTimeout(() => {
+          // Notifier le Game Manager qui gérera le nettoyage, le score et l'avancement
+          system.el.emit('coffee-delivered', { cup: cup, customer: this.el });
+        }, 0);
+        
         break; // Stop la boucle
       }
     }

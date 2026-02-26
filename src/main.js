@@ -6,7 +6,6 @@ import * as THREE from "three";
 // Globals (État du jeu)
 window.isInventoryOpen = false;
 window.menuLock = false;
-window.bButtonLock = false; // Verrouillage pour le bouton B (machine à café)
 window.isAnyBtnPressed = false;
 window.uiClickLock = false;
 window._xrDebugOverlay = null;
@@ -18,7 +17,7 @@ import "./components/ar-cursor.js";
 import "./components/ar-plane-detection.js";
 import "./components/welcome-panel.js";
 import "./components/vr-controls.js";
-import "./components/grab-system.js";
+import "./components/xr-interaction-system.js"; // Système manuel de grab et interaction machine à café
 import "./components/hud-menu.js";
 import "./components/coffee-machine.js";
 import "./components/coffee-temperature.js";
@@ -46,7 +45,31 @@ document.addEventListener("DOMContentLoaded", () => {
       window.xrSession = session;
 
       document.getElementById("landing-page").style.display = "none";
+      
+      // Afficher l'overlay de debug AR
+      const arOverlay = document.getElementById("ar-overlay");
+      if (arOverlay) arOverlay.style.display = "block";
+      
       scene.play();
+
+      // ⚡ ACTIVER LE PLANE-DETECTION ⚡
+      if (session.enabledFeatures && session.enabledFeatures.includes('plane-detection')) {
+        console.log('✅ Plane-detection activé ! Commencez à scanner votre environnement.');
+        scene.setAttribute('ar-plane-detection', 'visualize: true');
+      } else {
+        console.warn('⚠️ Plane-detection non disponible sur cet appareil.');
+        // Créer un sol de secours statique
+        const fallbackFloor = document.createElement('a-plane');
+        fallbackFloor.setAttribute('position', '0 0 -2');
+        fallbackFloor.setAttribute('rotation', '-90 0 0');
+        fallbackFloor.setAttribute('width', '10');
+        fallbackFloor.setAttribute('height', '10');
+        fallbackFloor.setAttribute('color', '#666');
+        fallbackFloor.setAttribute('static-body', 'shape: box');
+        fallbackFloor.setAttribute('visible', 'false');
+        scene.appendChild(fallbackFloor);
+        console.log('🛡️ Sol de secours créé (invisible)');
+      }
 
       // Pré-crée le HUD en tant qu'enfant de la caméra (cache par défaut)
       const cam = document.getElementById("cam");
@@ -93,6 +116,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       scene.setAttribute("game-manager", "");
       scene.setAttribute("stain-manager", "");
+      scene.setAttribute("xr-interaction-system", ""); // Système manuel de grab et interaction
 
       setTimeout(() => {
         const cam = document.getElementById("cam");
@@ -181,92 +205,60 @@ function handleControllerInteraction(controller) {
 
 function xrLoop(time, frame) {
   const ses = window.xrSession;
-  if (ses) {
-    let anyTriggerPressed = false;
+  if (!ses) return;
 
-    for (const source of ses.inputSources) {
-      if (!source.gamepad) continue;
+  let anyTriggerPressed = false;
 
-      // État du Trigger (Bouton 0) pour le clic UI
-      if (source.gamepad.buttons[0] && source.gamepad.buttons[0].pressed) {
-        anyTriggerPressed = true;
-      }
+  // Parcourir les sources d'entrée réelles du système
+  for (const source of ses.inputSources) {
+    if (!source || !source.gamepad) continue;
 
-      // Gestion Inventaire (Boutons X/Y sur la main gauche)
-      if (source.handedness === "left") {
-        const buttons = source.gamepad.buttons;
+    const buttons = source.gamepad.buttons;
+    const hand = source.handedness;
 
-        // Debug helper (décommenter pour voir dans la console)
-        // console.log("Bouton 3:", buttons[3]?.pressed, "Bouton 4:", buttons[4]?.pressed, "Bouton 5:", buttons[5]?.pressed);
+    // --- 1. DETECTION TRIGGER (Pour le clic UI) ---
+    if (buttons[0] && buttons[0].pressed) {
+      anyTriggerPressed = true;
+    }
 
-        const menuButtonPressed =
-          (buttons[3] && buttons[3].pressed) ||
-          (buttons[4] && buttons[4].pressed) ||
-          (buttons[5] && buttons[5].pressed);
+    // --- 2. DETECTION INVENTAIRE (Main Gauche Uniquement) ---
+    if (hand === "left") {
+      // On scanne TOUS les boutons possibles pour X/Y (3, 4, 5)
+      const isMenuPressed = (buttons[3]?.pressed || buttons[4]?.pressed || buttons[5]?.pressed);
+      
+      if (isMenuPressed && !window.menuLock) {
+        window.menuLock = true;
+        window.isInventoryOpen = !window.isInventoryOpen;
+        
+        console.log("🎮 BOUTON GAUCHE DÉTECTÉ ! État inventaire:", window.isInventoryOpen);
 
-        if (menuButtonPressed && !window.menuLock) {
-          window.menuLock = true;
-          window.isInventoryOpen = !window.isInventoryOpen;
-
-          // SOLUTION SIMPLE : Toggle la visibilité du menu existant
-          const menuEl = document.getElementById("hud-inventory");
-          if (menuEl) {
-            if (window.isInventoryOpen) {
-              menuEl.setAttribute("visible", "true");
-              menuEl.object3D.visible = true;
-              console.log("🎒 INVENTAIRE : OUVERT");
-            } else {
-              menuEl.setAttribute("visible", "false");
-              menuEl.object3D.visible = false;
-              console.log("🎒 INVENTAIRE : FERMÉ");
-            }
-          }
-        } else if (!menuButtonPressed) {
-          window.menuLock = false;
+        const menuEl = document.getElementById("hud-inventory");
+        if (menuEl) {
+          menuEl.setAttribute("visible", window.isInventoryOpen ? "true" : "false");
+          menuEl.object3D.visible = window.isInventoryOpen;
+          console.log(window.isInventoryOpen ? "🎒 INVENTAIRE : OUVERT" : "🎒 INVENTAIRE : FERMÉ");
+        } else {
+          console.warn('⚠️ Menu inventaire introuvable (ID: hud-inventory)');
         }
-
-        // BOUTON B (bouton 1) : Déclencher la machine à café
-        const bButtonPressed = buttons[1] && buttons[1].pressed;
-        if (bButtonPressed && !window.bButtonLock) {
-          window.bButtonLock = true;
-          
-          // Chercher la machine à café proche du joueur
-          const cam = document.getElementById("cam");
-          if (cam) {
-            const machines = document.querySelectorAll("[coffee-machine]");
-            const camPos = new THREE.Vector3();
-            cam.object3D.getWorldPosition(camPos);
-            
-            for (let machine of machines) {
-              if (!machine.object3D) continue;
-              const machinePos = new THREE.Vector3();
-              machine.object3D.getWorldPosition(machinePos);
-              
-              // Si la machine est à moins de 1.5m, on l'active
-              if (camPos.distanceTo(machinePos) < 1.5) {
-                const comp = machine.components['coffee-machine'];
-                if (comp && !comp.isBrewing) {
-                  comp.onClick(); // Déclenche la préparation
-                  console.log("☕ Bouton B : Machine à café activée");
-                }
-                break;
-              }
-            }
-          }
-        } else if (!bButtonPressed) {
-          window.bButtonLock = false;
-        }
+      } else if (!isMenuPressed) {
+        window.menuLock = false;
       }
     }
-    window.isAnyBtnPressed = anyTriggerPressed;
-    if (!anyTriggerPressed) window.uiClickLock = false;
   }
 
-  handleControllerInteraction(window.leftController);
-  handleControllerInteraction(window.rightController);
+  window.isAnyBtnPressed = anyTriggerPressed;
+  if (!anyTriggerPressed) window.uiClickLock = false;
+
+  // Appels des interactions (on passe les contrôleurs s'ils existent)
+  if (window.leftController) handleControllerInteraction(window.leftController);
+  if (window.rightController) handleControllerInteraction(window.rightController);
+  
   updateDebugOverlay();
 
-  if (window.xrSession) window.xrSession.requestAnimationFrame(xrLoop);
+  // On relance la boucle
+  if (window.xrSession) {
+    window.xrSession.requestAnimationFrame(xrLoop);
+  }
 }
 
 // --- DEBUG HELPERS ---

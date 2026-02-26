@@ -11,18 +11,31 @@ AFRAME.registerComponent('grab-system', {
     this.grabbedEl = null;
     this.velocities = [];
 
+    // Binding des méthodes pour garder le contexte 'this'
+    this.onGrab = this.onGrab.bind(this);
+    this.onRelease = this.onRelease.bind(this);
+    this.onAxisMove = this.onAxisMove.bind(this);
+
     // A-Frame gère nativement le trigger (gâchette) ou le grip
-    this.el.addEventListener('triggerdown', this.onGrab.bind(this));
-    this.el.addEventListener('triggerup', this.onRelease.bind(this));
-    this.el.addEventListener('gripdown', this.onGrab.bind(this));
-    this.el.addEventListener('gripup', this.onRelease.bind(this));
+    this.el.addEventListener('triggerdown', this.onGrab);
+    this.el.addEventListener('triggerup', this.onRelease);
+    this.el.addEventListener('gripdown', this.onGrab);
+    this.el.addEventListener('gripup', this.onRelease);
 
     // Écoute des joysticks pour faire tourner l'objet
-    this.el.addEventListener('axismove', this.onAxisMove.bind(this));
+    this.el.addEventListener('axismove', this.onAxisMove);
+    
+    // Debug : vérifier que les événements sont bien émis
+    console.log(`🖐️ Grab-system initialisé pour main ${this.data.handedness}`);
   },
 
-  onGrab: function () {
-    if (this.grabbedEl) return;
+  onGrab: function (evt) {
+    console.log(`✊ Événement grip/trigger détecté sur main ${this.data.handedness}!`, evt.type);
+    
+    if (this.grabbedEl) {
+      console.log('⚠️ Objet déjà attrapé, ignore');
+      return;
+    }
 
     const handPos = new THREE.Vector3();
     this.el.object3D.getWorldPosition(handPos);
@@ -44,7 +57,10 @@ AFRAME.registerComponent('grab-system', {
       }
     });
 
-    if (!closestEl) return;
+    if (!closestEl) {
+      console.log(`🔍 Aucun objet grabbable trouvé à moins de ${this.data.maxDist}m`);
+      return;
+    }
 
     // --- ATTRAPER L'OBJET ---
     this.grabbedEl = closestEl;
@@ -58,11 +74,16 @@ AFRAME.registerComponent('grab-system', {
       this.grabbedEl.body.updateMassProperties();
     }
 
-    console.log('✊ Objet attrapé !');
+    console.log(`✊ Objet attrapé : ${this.grabbedEl.getAttribute('gltf-model') || 'box'} (distance: ${closestDist.toFixed(2)}m)`);
   },
 
   onRelease: function () {
-    if (!this.grabbedEl) return;
+    console.log(`🖐️ Événement release détecté sur main ${this.data.handedness}!`);
+    
+    if (!this.grabbedEl) {
+      console.log('⚠️ Aucun objet à relâcher');
+      return;
+    }
 
     // --- CALCUL DE LA VÉLOCITÉ (LANCER) ---
     let vx = 0, vy = 0, vz = 0;
@@ -93,8 +114,8 @@ AFRAME.registerComponent('grab-system', {
       this.grabbedEl.body.wakeUp();
     }
 
+    console.log(`🖐️ Objet relâché : ${this.grabbedEl.getAttribute('gltf-model') || 'box'} avec vélocité (${vx.toFixed(1)}, ${vy.toFixed(1)}, ${vz.toFixed(1)})`);
     this.grabbedEl = null;
-    console.log('🖐️ Objet relâché !');
   },
 
   onAxisMove: function (event) {

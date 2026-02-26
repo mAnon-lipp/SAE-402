@@ -55,30 +55,42 @@ AFRAME.registerSystem('game-manager', {
     
     console.log(`☕ Café livré avec succès ! Score: ${this.state.score}`);
 
-    // 1. Nettoyage propre de la tasse (Physique Cannon.js + DOM)
-    if (cup) {
-      if (cup.body && cup.body.world) {
-        try { cup.body.world.removeBody(cup.body); } catch(e) { console.warn("Erreur suppression body tasse", e); }
-      }
-      if (cup.parentNode) cup.parentNode.removeChild(cup);
-      
-      const cupIdx = this.state.spawnedObjects.indexOf(cup);
-      if (cupIdx > -1) this.state.spawnedObjects.splice(cupIdx, 1);
-    }
-
-    // 2. Nettoyage propre du client servi (Physique Cannon.js + DOM)
-    if (customer) {
-      // Nettoyer tous les corps physiques potentiels liés au client
-      customer.querySelectorAll('[static-body], [dynamic-body]').forEach(child => {
-        if (child.body && child.body.world) {
-          try { child.body.world.removeBody(child.body); } catch(e) {}
+    // ⚡ FIX FREEZE CRITIQUE : Toutes les suppressions doivent être différées
+    // pour éviter de supprimer un objet pendant la phase de calcul physique Cannon.js
+    setTimeout(() => {
+      // 1. Nettoyage propre de la tasse (Physique Cannon.js + DOM)
+      if (cup && cup.parentNode) {
+        try {
+          if (cup.body && cup.body.world) {
+            cup.body.world.removeBody(cup.body);
+          }
+          cup.parentNode.removeChild(cup);
+          
+          const cupIdx = this.state.spawnedObjects.indexOf(cup);
+          if (cupIdx > -1) this.state.spawnedObjects.splice(cupIdx, 1);
+        } catch(e) { 
+          console.warn("Erreur suppression tasse:", e); 
         }
-      });
-      if (customer.parentNode) customer.parentNode.removeChild(customer);
-      
-      const custIdx = this.state.customers.indexOf(customer);
-      if (custIdx > -1) this.state.customers.splice(custIdx, 1);
-    }
+      }
+
+      // 2. Nettoyage propre du client servi (Physique Cannon.js + DOM)
+      if (customer && customer.parentNode) {
+        try {
+          // Nettoyer tous les corps physiques potentiels liés au client
+          customer.querySelectorAll('[static-body], [dynamic-body]').forEach(child => {
+            if (child.body && child.body.world) {
+              child.body.world.removeBody(child.body);
+            }
+          });
+          customer.parentNode.removeChild(customer);
+          
+          const custIdx = this.state.customers.indexOf(customer);
+          if (custIdx > -1) this.state.customers.splice(custIdx, 1);
+        } catch(e) {
+          console.warn("Erreur suppression client:", e);
+        }
+      }
+    }, 0);
 
     // 3. Faire avancer la file d'attente après un court délai
     setTimeout(() => {

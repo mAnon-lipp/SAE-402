@@ -22,6 +22,19 @@ AFRAME.registerComponent("hud-menu", {
     bg.setAttribute("material", "color: #111; shader: flat; opacity: 0.8; depthTest: false; side: double");
     this.el.appendChild(bg);
 
+    // ⚡ LUMiÈRE LOCALE pour les modèles 3D ⚡
+    const light1 = document.createElement("a-light");
+    light1.setAttribute("type", "point");
+    light1.setAttribute("intensity", "0.8");
+    light1.setAttribute("position", "0 0 0.5");
+    this.el.appendChild(light1);
+
+    const light2 = document.createElement("a-light");
+    light2.setAttribute("type", "point");
+    light2.setAttribute("intensity", "0.6");
+    light2.setAttribute("position", "0 0.5 0.3");
+    this.el.appendChild(light2);
+
     const title = document.createElement("a-text");
     title.setAttribute("value", "VR STORE");
     title.setAttribute("align", "center");
@@ -70,6 +83,10 @@ AFRAME.registerComponent("hud-menu", {
       btn.addEventListener("click", (evt) => {
         if (!this.canClick) return; // BLOQUE LE SPAWN ACCIDENTEL
         evt.stopPropagation();
+        
+        // ⚡ DEBUG : Vérifier quel item est spawné ⚡
+        console.log(`📦 Clic sur bouton index ${index}: ${item.label} - ${item.model || 'box'}`);
+        
         this.spawnObject(item);
 
         // Petit effet de retour visuel
@@ -85,6 +102,9 @@ AFRAME.registerComponent("hud-menu", {
         icon = document.createElement("a-entity");
         icon.setAttribute("gltf-model", `url(${item.model})`);
         icon.setAttribute("scale", item.menuScale || "0.05 0.05 0.05");
+        
+        // ⚡ FIX : Animation de rotation pour meilleur visuel ⚡
+        icon.setAttribute("animation", "property: rotation; to: 0 360 0; loop: true; dur: 6000; easing: linear");
       } else {
         icon = document.createElement("a-box");
         icon.setAttribute("scale", "0.08 0.08 0.08");
@@ -108,6 +128,8 @@ AFRAME.registerComponent("hud-menu", {
   },
 
   spawnObject: function (item) {
+    console.log(`🚀 Spawn démarré pour: ${item.label}`);
+    
     const scene = document.querySelector("a-scene");
     const entity = document.createElement("a-entity");
 

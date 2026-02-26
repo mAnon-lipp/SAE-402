@@ -188,5 +188,152 @@ Affiche en temps réel :
 ---
 
 **Date de mise à jour** : 25 février 2026  
-**Version** : 1.0.0 - Stable  
+**Version** : 1.3.0 - Grab System Fixed + Inventory Debug  
 **Testé sur** : Meta Quest 3 (WebXR Immersive AR)
+
+---
+
+## 🔧 Corrections Version 1.3.0 (25 février 2026)
+
+### ✅ 1. Grab System avec Grip - CORRIGÉ (Double système)
+
+**Problème** : Appuyer sur la gâchette arrière (grip) ne permettait pas d'attraper les objets.
+
+**Cause probable** : Le composant `hand-controls` d'A-Frame n'émettait pas toujours les événements `gripdown`/`gripup` de manière fiable dans certaines configurations WebXR.
+
+**Solution (Double système)** :
+1. **Système principal** : `grab-system.js` (écoute les événements A-Frame)
+2. **Système de secours** : `grab-fallback.js` (**nouveau composant**)
+   - Écoute directement l'API WebXR (`inputSources.gamepad.buttons`)
+   - Détecte manuellement les pressions grip/trigger
+   - Émet les événements ET appelle directement `grab-system`
+   - S'active automatiquement si les événements ne marchent pas
+
+**Logs de debug ajoutés** :
+```
+✊ Événement grip/trigger détecté sur main left!
+🔍 Aucun objet grabbable trouvé à moins de 0.5m
+✊ Objet attrapé : models/CoffeeMachine.glb (distance: 0.32m)
+🖐️ Objet relâché avec vélocité (0.5, 1.2, -0.3)
+```
+
+**Fichiers modifiés** :
+- `src/components/grab-fallback.js` (**nouveau** - système de secours)
+- `src/components/grab-system.js` (logs de debug)
+- `src/main.js` (import et activation du fallback)
+
+---
+
+### ✅ 2. Inventaire - Identification spawn erroné (DEBUG)
+
+**Problème** : Cliquer sur la machine à café spawnait une poubelle.
+
+**Solution** :
+- Ajout de **logs de debug** pour tracer exactement quel item est cliqué
+- Vérification que la closure JavaScript capture bien le bon `item`
+- Logs : 
+  ```
+  📦 Clic sur bouton index 0: COFFEE - models/CoffeeMachine.glb
+  🚀 Spawn démarré pour: COFFEE
+  ```
+
+**Comment vérifier** :
+1. Ouvrez la console du navigateur (F12)
+2. Cliquez sur un item dans l'inventaire
+3. Vérifiez que le log correspond au bon item
+4. Si le log est correct mais le spawn est faux, le problème vient de `spawnObject()`
+
+**Fichiers modifiés** : `src/components/hud-menu.js`
+
+---
+
+## � Guide de Debug Version 1.3.0
+
+### Si le grab ne fonctionne toujours pas :
+
+1. **Ouvrez la console** (F12 dans le navigateur Quest)
+2. **Appuyez sur grip** sur votre manette
+3. **Cherchez ces messages** :
+   ```
+   🎮 FALLBACK: right grip DOWN détecté!
+   ✊ Événement grip/trigger détecté sur main right!
+   ```
+
+**Scénarios** :
+
+| Message dans console | Signification | Solution |
+|---------------------|---------------|----------|
+| Aucun message | Les événements ne sont pas détectés | Le fallback devrait s'en occuper |
+| `FALLBACK: grip DOWN` uniquement | Le fallback fonctionne | Vérifiez que les objets ont la classe `grabbable` |
+| `Événement grip détecté` | hand-controls fonctionne | Vérifiez la distance (défaut: 0.5m) |
+| `Aucun objet grabbable trouvé` | Trop loin de l'objet | Approchez-vous à moins de 0.5m |
+| `Objet attrapé` | ✅ Tout fonctionne ! | - |
+
+### Si le mauvais objet spawn dans l'inventaire :
+
+1. **Ouvrez la console** (F12)
+2. **Cliquez sur machine à café**
+3. **Vérifiez le log** :
+   ```
+   📦 Clic sur bouton index 0: COFFEE - models/CoffeeMachine.glb
+   🚀 Spawn démarré pour: COFFEE
+   ```
+
+**Si le log affiche** `index 0: COFFEE` **mais qu'une poubelle spawn** :
+- Le problème est dans la fonction `spawnObject()`
+- Vérifiez que `item.model` contient bien le bon chemin
+- Vérifiez qu'il n'y a pas de cache du modèle 3D
+
+**Si le log affiche** `index 1: TRASH` **alors que vous avez cliqué sur COFFEE** :
+- Le raycaster pointe le mauvais bouton
+- Essayez de pointer plus précisément au centre du bouton
+- Le problème peut venir d'une superposition de colliders
+
+---
+
+## �🔧 Corrections Version 1.2.0 (25 février 2026)
+
+### ✅ 1. Grab System (CORRIGÉ)
+**Problème** : Les objets ne pouvaient plus être attrapés avec grip/trigger.
+
+**Cause** : Les entités `leftHand` et `rightHand` n'avaient pas le composant natif A-Frame `hand-controls`, nécessaire pour générer les événements `gripdown`, `gripup`, `triggerdown`, `triggerup`.
+
+**Solution** :
+- Ajout du composant `hand-controls="hand: left/right; handModelStyle: lowPoly"` aux entités des mains
+- Les événements sont maintenant correctement émis et capturés par `grab-system`
+
+**Fichiers modifiés** : `index.html`
+
+---
+
+### ✅ 2. Machine à Café - Bouton B (AMÉLIORÉ)
+**Problème** : Appuyer sur B ne déclenchait plus la machine à café, ou c'était peu fiable.
+
+**Ancienne solution** : Détection par distance (1.5m) sans feedback visuel.
+
+**Nouvelle solution** :
+- Création d'un nouveau composant **`coffee-machine-pointer`**
+- **Raycasting depuis la main droite** : On pointe la machine avec la main
+- **Indicateur visuel** : Cercle vert tournant au-dessus de la machine pointée 🟢
+- **Activation au bouton B** : Appuyer sur B active uniquement la machine pointée
+- **Feedback** : Flash blanc lors de l'activation
+
+**Fichiers modifiés** :
+- `src/components/coffee-machine-pointer.js` (nouveau composant)
+- `src/main.js` (import et activation du composant)
+
+---
+
+### ✅ 3. Visualisation des Modèles dans l'Inventaire (CORRIGÉ)
+**Problème** : Les modèles 3D dans l'inventaire apparaissaient comme des ombres noires.
+
+**Cause** : Pas d'éclairage local dans le menu HUD (attaché à la caméra).
+
+**Solution** :
+- Ajout de 2 **lumières point** dans le menu HUD
+- Animation de **rotation continue** des modèles pour meilleur aperçu
+- Intensité lumineuse optimisée (0.8 + 0.6)
+
+**Fichiers modifiés** : `src/components/hud-menu.js`
+
+---
